@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {analyze,parseDemand,RUNS,reportText,SAMPLE,riskLabel} from '../public/assets/logic.js';
+test('multiline comma Japanese comma parsing',()=>{assert.deepEqual(parseDemand('1, 2\n3，4;5'),[1,2,3,4,5]);});
+test('bad data rejected',()=>{assert.throws(()=>parseDemand('1,not-number,2'),/無効/);assert.throws(()=>parseDemand('2,-1,3'),/無効/);});
+test('constant demand zero residual and safe stock',()=>{const r=analyze({demand:Array(35).fill(10),leadTime:7,service:95,method:'overall',inventory:69});assert.equal(r.sigma,0);assert.equal(r.mean,70);assert.equal(r.reorderPoint,70);assert.equal(r.safetyStock,0);assert.equal(r.stockout,100);});
+test('rolling baseline has no lookahead',()=>{const r=analyze({demand:[1,1,1,10,10,10,10,10],method:'sma',window:3,leadTime:2});assert.equal(r.baselines[3],1);assert.equal(r.baselines[4],4);assert.equal(r.futureBaseline,10);});
+test('simulated percentiles ordered, seed reproducible',()=>{const p={demand:SAMPLE,leadTime:7,method:'sma',service:95,inventory:400};const r=analyze(p),b=analyze(p);assert.equal(r.sums.length,RUNS);assert.deepEqual(r.sums,b.sums);assert.ok(r.p90<=r.p95&&r.p95<=r.p99);assert.ok(r.reorderPoint>=r.mean);assert.ok(r.stockout>=0&&r.stockout<=100);assert.match(reportText(r),/在庫切れ確率/);});
+test('larger inventory reduces stockout risk',()=>{const a=analyze({demand:SAMPLE,leadTime:7,inventory:200});const b=analyze({demand:SAMPLE,leadTime:7,inventory:600});assert.ok(a.stockout>b.stockout);});
+test('valid input bounds',()=>{assert.throws(()=>analyze({demand:[1,2,3],service:100}),/サービス/);assert.throws(()=>analyze({demand:[1,2,3],leadTime:0}),/リードタイム/);assert.equal(riskLabel(null),'比較不可');});

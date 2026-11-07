@@ -1,0 +1,27 @@
+name: DemandScope checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test and syntax check
+        run: npm run check
+      - name: Verify deployment structure
+        run: |
+          test -f public/index.html
+          test -f public/pro/index.html
+          test -f public/assets/jszip.min.js
+          test -f functions/api/checkout.js
+          test -f functions/api/activate.js
+          test -f public/_headers
+          ! grep -R -E 'sk_(live|test)_[A-Za-z0-9]{15,}' --include='*.js' --include='*.html' public/ functions/ server/

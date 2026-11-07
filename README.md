@@ -115,3 +115,15 @@ npx wrangler pages dev public --port 8788
 - 無料版で新しいファイルを開くと旧結果は非表示になります。
 - CSPなど静的ページのセキュリティヘッダを追加しました。
 - **安全性の境界**：試作版のPro処理はブラウザJSなので、支払いなしにコード改変して模倣することまで阻止できません。商用販売にするにはサーバー側での権限付き処理、購入者本人認証・ID紐づけが必要です。
+
+## v0.3 — file upload, bilingual picker, PDF, Stripe test checkout
+
+- Browser-native file chooser text is now custom translated labels in Japanese / English.
+- Downloadable 60-day synthetic demand fixtures: 2-SKU CSV, 5-SKU CSV, row-based CSV, and 5-SKU Excel at `public/samples/`.
+- Free and Pro include a browser **Print → Save as PDF** A4 report with text and tables. Browser PDF printing preserves Japanese characters and selectable text; no demand data is uploaded.
+- Stripe **test mode only** allows a temporary JPY 100/month recurring Checkout price when no dedicated `STRIPE_PRO_PRICE_ID` is configured. It is not the final sale price.
+- Pages Settings > Variables and Secrets: set `STRIPE_SECRET_KEY=sk_test_...` and `SESSION_SECRET` (32+ unpredictable characters) as encrypted Secrets, then redeploy. Optional: `APP_ORIGIN=https://web-stock-78r.pages.dev` and `STRIPE_PRO_PRICE_ID=price_...` (dedicated *test* monthly price).
+- `/api/entitlement` returns only the names of missing settings, not any secret values.
+- Existing NamiData Lab pricing is untouched; this pilot must not accept live cards or a live Stripe key.
+- PDF output requires a browser with Save as PDF printing. It does not directly stream a PDF from the server.
+- **Live Cloudflare Stripe transaction has not yet been verified** (needs user to configure Secrets). Do not enable real billing until user identity, subscriptions, taxes, and security tests are completed.

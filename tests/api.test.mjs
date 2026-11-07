@@ -1,16 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState} from '../server/stripe.js';
+import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState,TEST_MONTHLY_JPY,configurationMissing} from '../server/stripe.js';
 import {onRequestPost as checkout} from '../functions/api/checkout.js';
 import {onRequestPost as activate} from '../functions/api/activate.js';
 import {onRequestGet as verify} from '../functions/api/entitlement.js';
 const env={STRIPE_SECRET_KEY:'sk_test_mock_only_123',STRIPE_PRO_PRICE_ID:'price_valid',SESSION_SECRET:'X'.repeat(48),APP_ORIGIN:'http://localhost:8788'};
 function request(path,origin='http://localhost:8788',body=null,headers={}){return new Request('http://localhost:8788'+path,{method:body===null?'GET':'POST',headers:{Origin:origin,'Content-Type':'application/json',...headers},body:body===null?undefined:JSON.stringify(body)})}
 const sess={livemode:false,mode:'subscription',status:'complete',payment_status:'paid',metadata:{app:'demand-scope-pro'},subscription:'sub_test123',customer:'cus_test123'};
-const sub={livemode:false,status:'active',customer:'cus_test123',items:{data:[{price:{id:'price_valid'}}]}};
+const sub={livemode:false,status:'active',metadata:{app:'demand-scope-pro'},customer:'cus_test123',items:{data:[{price:{id:'price_valid'}}]}};
 test('test-mode-only config',()=>{assert.ok(isConfigured(env));assert.ok(!isConfigured({...env,STRIPE_SECRET_KEY:'sk_live_forbidden'}));assert.ok(!isConfigured({...env,SESSION_SECRET:'short'}))});
 test('reject wrong origin before Stripe',async()=>{const res=await checkout({request:request('/api/checkout','https://evil.test',{}),env});assert.equal(res.status,403)});
-test('verify unavailable without secrets',async()=>{const res=await verify({request:request('/api/entitlement'),env:{}});assert.deepEqual(await res.json(),{active:false,configured:false})});
+test('verify unavailable without secrets',async()=>{const res=await verify({request:request('/api/entitlement'),env:{}});assert.deepEqual(await res.json(),{active:false,configured:false,missing:['STRIPE_SECRET_KEY','SESSION_SECRET'],mode:'test'})});
 test('checkout uses configured Price ID only',async()=>{const old=globalThis.fetch;try{let seen=null;globalThis.fetch=async(_url,opt)=>{seen=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};const res=await checkout({request:request('/api/checkout',undefined,{}),env});assert.equal(res.status,200);assert.equal(seen.get('line_items[0][price]'),'price_valid');assert.equal(seen.get('mode'),'subscription');assert.match(seen.get('client_reference_id'),/^[A-Za-z0-9_-]{40,50}$/);assert.match(res.headers.get('Set-Cookie'),/demand_checkout=/);assert.match(seen.get('success_url'),/session_id=/)}finally{globalThis.fetch=old}});
 test('signed entitlement returns false on tampered cookie, active on valid cookie',async()=>{const old=globalThis.fetch;try{globalThis.fetch=async()=>new Response(JSON.stringify(sub));const cookie=(await issueCookie('sub_test123','cus_test123',env,false)).split(';')[0];assert.ok(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie}),env));assert.equal(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie+'x'}),env),null);const bad=await verifiedSubscription(env,'sub_test123');assert.equal(bad.status,'active');globalThis.fetch=async()=>new Response(JSON.stringify({...sub,status:'canceled'}));assert.equal(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie}),env),null)}finally{globalThis.fetch=old}});
 test('checkout activation binds to initiating browser and rejects replay',async()=>{const old=globalThis.fetch;try{
@@ -36,4 +36,28 @@ test('reject malformed or insecure production APP_ORIGIN before Stripe calls',()
  assert.equal(isConfigured({...env,APP_ORIGIN:'https://demand.example.com'}),true);
  assert.equal(isConfigured({...env,APP_ORIGIN:'http://localhost:8788'}),true);
  assert.equal(isConfigured(null),false);
+});
+
+test('inline JPY100 test checkout works without product Price ID or explicit origin',async()=>{
+ const simple={STRIPE_SECRET_KEY:'sk_test_mock_only_123',SESSION_SECRET:'Y'.repeat(48)};
+ assert.ok(isConfigured(simple));assert.equal(TEST_MONTHLY_JPY,100);assert.deepEqual(configurationMissing(simple),[]);
+ const old=globalThis.fetch;let posted;
+ try{globalThis.fetch=async(_url,opts)=>{posted=new URLSearchParams(opts.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/test-session'}))};
+ const res=await checkout({request:request('/api/checkout',undefined,{}),env:simple});
+ assert.equal(res.status,200);assert.equal(posted.get('line_items[0][price_data][unit_amount]'),'100');
+ assert.equal(posted.get('line_items[0][price_data][currency]'),'jpy');
+ assert.equal(posted.get('line_items[0][price_data][recurring][interval]'),'month');
+ assert.equal(posted.get('line_items[0][price]'),null);
+ assert.match(posted.get('success_url'),/^http:\/\/localhost:8788\/pro\//);
+ }finally{globalThis.fetch=old}
+});
+test('only this app can authorize inline-price test subscriptions',async()=>{
+ const env2={STRIPE_SECRET_KEY:'sk_test_mock_only_123',SESSION_SECRET:'Z'.repeat(48)};
+ const old=globalThis.fetch;
+ const inline={livemode:false,status:'active',customer:'cus_test123',metadata:{app:'demand-scope-pro'},items:{data:[{price:{currency:'jpy',unit_amount:100,recurring:{interval:'month'}}}]}};
+ try{globalThis.fetch=async()=>new Response(JSON.stringify(inline));assert.ok(await verifiedSubscription(env2,'sub_test123'));
+ globalThis.fetch=async()=>new Response(JSON.stringify({...inline,metadata:{app:'other'}}));assert.equal(await verifiedSubscription(env2,'sub_test123'),null);
+ globalThis.fetch=async()=>new Response(JSON.stringify({...inline,livemode:true}));assert.equal(await verifiedSubscription(env2,'sub_test123'),null);
+ globalThis.fetch=async()=>new Response(JSON.stringify({...inline,items:{data:[{price:{currency:'jpy',unit_amount:9800,recurring:{interval:'month'}}}]}}));assert.equal(await verifiedSubscription(env2,'sub_test123'),null);
+ }finally{globalThis.fetch=old}
 });

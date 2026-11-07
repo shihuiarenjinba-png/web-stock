@@ -73,6 +73,12 @@ const en={
 'すべての結果をCSV保存':'Download all results (CSV)',
 'ファイルを選択してください。':'Choose a file to continue.',
 '登録済みの商品と同名の場合は別系列として追加されます。':'Existing products are not overwritten; duplicate names are added as new entries.',
+'ファイルを選択':'Choose file','ファイルが選択されていません':'No file selected',
+'まずは3ステップ':'Get started in 3 steps','Excel / CSVを選択':'Choose Excel / CSV','系列を確認して分析':'Review and analyze series','CSV / PDFを保存':'Export CSV / PDF',
+'✓ 1列（または1行）が1商品の日々の需要です。日付列は数えません。無料版は2商品まで選択できます。':'✓ Each column (or row) is one product. Date labels are excluded. Free allows up to two series.',
+'動作確認用ファイル':'Try sample files','CSV（2商品）':'CSV (2 SKUs)','Excel（5商品）':'Excel (5 SKUs)','行方向CSV':'Rows CSV','PDF出力':'Export PDF',
+'Proの操作':'Pro workflow','検出系列を分割または合算':'Split or sum detected series','登録後に一括分析・PDF保存':'Run batch and export PDF',
+'テスト用100円/月（Stripeテストカードで支払うため実際の請求はありません）。販売価格ではありません。':'Test checkout: ¥100/month using a Stripe test card only. No real charges. Not the final price.',
 };
 let current='ja';const orig=new WeakMap();
 export const lang=()=>current;

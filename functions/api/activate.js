@@ -8,6 +8,6 @@ export async function onRequestPost({request,env}){
  if(!(await validCheckoutBrowser(request,env,sess)))return json({error:'決済を開始したブラウザからもう一度お試しください。'},403);
  if(sess.livemode!==false||sess.mode!=='subscription'||sess.status!=='complete'||!['paid','no_payment_required'].includes(sess.payment_status)||sess.metadata?.app!=='demand-scope-pro'||typeof sess.subscription!=='string'||typeof sess.customer!=='string')return json({error:'有効なテスト決済を確認できませんでした。'},403);
  const sub=await verifiedSubscription(env,sess.subscription,sess.customer);if(!sub)return json({error:'有効なPro契約を確認できませんでした。'},403);
- const secure=origin(env).startsWith('https:');return json({active:true,status:sub.status},200,{'Set-Cookie':await issueCookie(sess.subscription,sess.customer,env,secure)});
+ const secure=origin(env,request).startsWith('https:');return json({active:true,status:sub.status},200,{'Set-Cookie':await issueCookie(sess.subscription,sess.customer,env,secure)});
  }catch{return json({error:'テスト決済の検証に失敗しました。'},502)}
 }

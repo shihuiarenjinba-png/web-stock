@@ -28,3 +28,35 @@
 
 .series-item input.series-stock{flex:0 0 70px!important;width:70px!important;min-width:0!important;height:29px;font-size:11px;padding:5px!important;border:1px solid #3b596d;border-radius:6px;background:#081827;color:#d6f6f0}
 @media(max-width:420px){.series-item input.series-stock{width:56px!important;flex-basis:56px!important}.series-item .series-count{font-size:10px}}
+
+/* Upload controls and onboarding: avoid browser-native Japanese-only file picker labels. */
+.visually-hidden-file{position:absolute!important;width:1px!important;height:1px!important;opacity:0;pointer-events:none;overflow:hidden;clip-path:inset(50%)}
+.file-picker{display:flex;align-items:center;gap:11px;min-width:0;min-height:64px;border:1px dashed #4c9f9c;border-radius:12px;background:#102e3d;padding:12px;flex-wrap:wrap}
+.file-picker-trigger{display:inline-flex!important;flex:0 0 auto;align-items:center;justify-content:center;cursor:pointer;border:0;border-radius:8px;background:#55d8c6;color:#053035!important;font-size:12px!important;font-weight:800!important;padding:10px 14px;margin:0!important}
+.file-picker-name{color:#b9d5d9;font-size:12px;overflow-wrap:anywhere;flex:1;min-width:150px}
+.file-picker:focus-within{outline:2px solid #68daca;outline-offset:3px}
+.workflow-guide{background:linear-gradient(90deg,#12343d,#14263a);border:1px solid #356c6c;border-radius:12px;margin-bottom:19px;padding:12px 14px;color:#dff9f5;font-size:12px}
+.workflow-guide strong{font-size:13px}.workflow-guide ol{display:flex;flex-wrap:wrap;gap:5px 25px;margin:8px 0 0;padding-left:19px;color:#b4d7d6}
+.workflow-guide li{padding:2px 0}
+.sample-links{background:#0c2230;border:1px solid #2b5967;border-radius:10px;margin-top:16px;padding:12px;display:flex;flex-wrap:wrap;align-items:center;gap:9px;font-size:11px}
+.sample-links span{color:#a2b7c9;width:100%}.sample-links a{border:1px solid #436b79;border-radius:6px;padding:5px 9px;color:#9fe9dc;text-decoration:underline;text-underline-offset:2px}
+.sample-links a:hover{background:#183a45}
+.tip-box{font-size:11px;color:#b2d5db;background:#103b414a;border-radius:8px;padding:10px 11px;margin:11px 0}
+.btn:focus-visible,.file-picker-trigger:focus-visible,a:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+@media(max-width:690px){.workflow-guide ol{display:block}.file-picker{align-items:flex-start;flex-direction:column}.file-picker-name{min-width:0}}
+/* Printable report: native browser PDF preserves Japanese glyphs and selectable text. */
+#pdf-print-area{display:none}
+@media print{
+ @page{size:A4;margin:14mm 13mm}
+ body{background:white!important;color:#0b2436!important;font-family:Arial,'Noto Sans CJK JP','Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif;font-size:10pt}
+ body>*:not(#pdf-print-area){display:none!important}
+ #pdf-print-area{display:block!important;position:static;width:auto;background:white;color:#0b2436}
+ #pdf-print-area h1{font-size:22pt;margin:0 0 7mm}#pdf-print-area h2{font-size:13pt;margin:7mm 0 3mm}
+ #pdf-print-area p{font-size:9pt;color:#344c58;line-height:1.5}
+ #pdf-print-area table{width:100%;border-collapse:collapse;font-size:9pt;margin-top:3mm}
+ #pdf-print-area th,#pdf-print-area td{text-align:left;border-bottom:1px solid #c9d5da;padding:2.5mm;word-break:break-word}
+ #pdf-print-area th{background:#eaf2f3;color:#233d49}
+ #pdf-print-area .pdf-section{break-inside:avoid;page-break-inside:avoid;margin-bottom:8mm}
+ #pdf-print-area .pdf-plot{width:100%;max-height:75mm;object-fit:contain;border:1px solid #d9e1e4}
+ #pdf-print-area .pdf-muted{font-size:8pt;color:#62737b}#pdf-print-area .pdf-newpage{break-before:page}
+}

@@ -60,6 +60,7 @@ const en={
 'Excel（.xlsx）、CSV、TSVに対応。データは端末内で読み取ります。':'Supports Excel (.xlsx), CSV and TSV. Files are parsed locally.',
 '分析するシート':'Worksheet','表の方向':'Data orientation','列ごと':'By column','行ごと':'By row',
 '分析する系列（無料版は最大2）':'Select series (Free: up to 2)',
+'右側の「現在庫」は各商品の手元にある数量です（任意）。例：2と入力すると現在庫2個として欠品確率を計算します。需要履歴の値や選択数ではありません。未入力なら欠品確率は表示しません。':'The on-hand field is the quantity currently available for each product (optional). Entering 2 means two units in stock for stockout probability. It is not past demand or the number of selected series. Leave blank to omit stockout probability.',
 '読み込んだ系列を分析':'Analyze selected series',
 '検出された系列':'Detected series','選択した系列':'Selected series',
 'ファイルのプレビュー':'File preview','未選択':'None selected',

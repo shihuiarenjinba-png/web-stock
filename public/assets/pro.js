@@ -2,6 +2,7 @@ import {analyze,parseDemand,SAMPLE,reportText,formatNumber} from './logic.js';
 import {drawHistogram} from './chart.js';
 import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './importer.js';
 import {initI18n,lang,t,errorMessage} from './i18n.js';
+import {printRiskReport} from './pdf-report.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
 let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null;
 const KEY='demandscope_pro_skus_v1';
@@ -13,9 +14,9 @@ async function boot(){try{const params=new URLSearchParams(location.search);if(p
  if(params.get('checkout')==='cancelled'){history.replaceState({},'',location.pathname);warn('決済はキャンセルされました。');}
  const res=await fetch('/api/entitlement',{cache:'no-store'});
  if(!res.ok){access(false,true);warn(lang()==='en'?'Pro requires deployment of Cloudflare Pages Functions and Stripe test configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripeテスト設定のデプロイが必要です。');return;}
- const state=await res.json();access(!!state.active,state.configured===false);if(state.error)warn(state.error);
+ const state=await res.json();access(!!state.active,state.configured===false);if(state.configured===false&&state.missing?.length)warn((lang()==='en'?'Setup needed: ':'設定が必要です: ')+state.missing.join(', '));if(state.error)warn(state.error);
  }catch(e){access(false,false);warn(e.message)} }
-function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました'):t('🔒 Stripe テスト決済で利用開始');$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。');$('checkout').disabled=unconfigured;if(unconfigured)$('accessText').textContent=lang()==='en'?'Configure Stripe test secrets, Price ID and Cloudflare site origin.':'Cloudflare PagesのStripeテスト秘密鍵、Price ID、サイトURLなどが未設定です。';if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
+function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました'):t('🔒 Stripe テスト決済で利用開始');$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。');$('checkout').disabled=unconfigured;if(unconfigured)$('accessText').textContent=lang()==='en'?'Configure the Stripe TEST secret key and session secret on Cloudflare Pages.':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。';if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
 $('checkout').addEventListener('click',async()=>{clearWarn();$('checkout').disabled=true;try{const x=await call('/api/checkout');location.assign(x.url)}catch(e){warn(e.message);$('checkout').disabled=false}});
 $('portal').addEventListener('click',async()=>{try{const x=await call('/api/portal');location.assign(x.url)}catch(e){warn(e.message)}});
 $('logout').addEventListener('click',async()=>{try{await call('/api/logout');access(false,false);toast('サインアウトしました')}catch(e){warn(e.message)}});
@@ -73,7 +74,7 @@ function renderImportedSheet(){
 }
 $('proFile').addEventListener('change',async ev=>{
  clearWarn();$('proImport').classList.add('hidden');importBook=null;importInspection=null;
- try{if(!ev.target.files?.[0])return;importBook=await loadWorkbook(ev.target.files[0]);fillOptions($('proSheet'),importBook.sheets.map(s=>s.name));renderImportedSheet();$('proImport').classList.remove('hidden');}
+ try{if(!ev.target.files?.[0])return;$('proFileName').textContent=ev.target.files[0].name;importBook=await loadWorkbook(ev.target.files[0]);fillOptions($('proSheet'),importBook.sheets.map(s=>s.name));renderImportedSheet();$('proImport').classList.remove('hidden');}
  catch(e){warn(e)}
 });
 $('proSheet').addEventListener('change',()=>{try{renderImportedSheet();clearWarn()}catch(e){warn(e)}});
@@ -98,6 +99,7 @@ $('proImportRun').addEventListener('click',()=>{
  if(errors.length)warn(errors.slice(0,8).join(' / '));
  }catch(e){warn(e)}
 });
+$('proPdf').addEventListener('click',()=>{if(!authorized)return warn(lang()==='en'?'Pro subscription required.':'Pro契約を確認してください。');const all=skus.filter(s=>analyses.has(s.id)).map(s=>({name:s.name,result:analyses.get(s.id)}));if(!all.length)return warn(lang()==='en'?'Run the batch first.':'先に一括実行してください。');toast(printRiskReport({results:all,language:lang(),chartCanvas:all.length===1?$('proHist'):null}));});
 $('downloadPro').addEventListener('click',()=>{
  if(!authorized)return warn(lang()==='en'?'Pro subscription required.':'Pro契約を確認してください。');
  if(!analyses.size)return warn(lang()==='en'?'Run simulations before downloading.':'一括実行後にダウンロードしてください。');
@@ -105,5 +107,5 @@ $('downloadPro').addEventListener('click',()=>{
  for(const s of skus){const r=analyses.get(s.id);if(r)rows.push([s.name,r.futureBaseline,r.sigma,r.mean,r.sd,r.median,r.p90,r.p95,r.p99,r.safetyStock,r.reorderPoint,r.stockout??'',r.lastZ??'',r.runs])}
  downloadText('demandscope-pro-results.csv',toCSV(rows));
 });
-initI18n(()=>{if(importInspection)renderImportSeries();renderTable();access(authorized,false);});
+initI18n(()=>{if(importInspection)renderImportSeries();renderTable();access(authorized,false);$('proFileName').textContent=$('proFile').files?.[0]?.name||t('ファイルが選択されていません');});
 boot();

@@ -1,7 +1,8 @@
 import {drawHistogram} from './chart.js';
 import {analyze,parseDemand,SAMPLE,formatNumber,riskLabel,reportText} from './logic.js';
 import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './importer.js';
-import {initI18n,lang,t,errorMessage} from './i18n.js';
+import {initI18n,lang,t,errorMessage,applyI18n} from './i18n.js';
+import {printRiskReport} from './pdf-report.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
 const form=$('form'),status=$('status');
 let workbook=null,inspection=null, results=[],selected=0, fileReadSequence=0;
@@ -45,7 +46,7 @@ function renderSeries(){
 function refreshLimits(){const root=$('freeSeries'),checked=root.querySelectorAll('input:checked').length;root.querySelectorAll('input[type=checkbox]').forEach(c=>{c.disabled=checked>=2&&!c.checked;c.closest('label').classList.toggle('limit-disabled',c.disabled);})}
 $('freeFile').addEventListener('change',async e=>{
  const fileSequence=++fileReadSequence;
- clearError();results=[];$('empty').classList.remove('hidden');$('results').classList.add('hidden');$('freeMulti').classList.add('hidden');$('status').textContent=lang()==='en'?'Not run':'未実行';$('status').classList.add('pending-tag');$('freeImport').classList.add('hidden');workbook=null;inspection=null;
+ clearError();$('freeFileName').textContent=e.target.files?.[0]?.name??t('ファイルが選択されていません');results=[];$('empty').classList.remove('hidden');$('results').classList.add('hidden');$('freeMulti').classList.add('hidden');$('status').textContent=lang()==='en'?'Not run':'未実行';$('status').classList.add('pending-tag');$('freeImport').classList.add('hidden');workbook=null;inspection=null;
  try{if(!e.target.files?.[0])return;const loaded=await loadWorkbook(e.target.files[0]);if(fileSequence!==fileReadSequence)return;workbook=loaded;options($('freeSheet'),workbook.sheets.map(s=>s.name));readSheet();$('freeImport').classList.remove('hidden');}
  catch(err){if(fileSequence===fileReadSequence)error(err)}
 });
@@ -76,6 +77,7 @@ form.addEventListener('submit',e=>{e.preventDefault();clearError();try{
  results=[{name:lang()==='en'?'Manual series':'手動入力',result}];selected=0;render();
 }catch(err){error(err);status.textContent=lang()==='en'?'Input error':'入力エラー';status.classList.add('pending-tag');}});
 $('sampleCsv').addEventListener('click',()=>{const vals=SAMPLE.map((n,i)=>[i+1,n,Math.max(0,n+((i%5)-2)*3)]);downloadText('demandscope-sample-2-series.csv',toCSV([['Day','SKU-A','SKU-B'],...vals]));notify(lang()==='en'?'Two-series sample CSV saved.':'2系列のCSVサンプルを保存しました。');});
+$('downloadPdf').addEventListener('click',()=>{if(!results.length)return;notify(printRiskReport({results,language:lang(),chartCanvas:results.length===1?$('hist'):null}));});
 $('copy').addEventListener('click',async()=>{if(!results.length)return;const text=results.map(x=>reportText(x.result,x.name,lang())).join('\n\n');try{await navigator.clipboard.writeText(text);notify(lang()==='en'?'Copied.':'コピーしました。')}catch{notify(lang()==='en'?'Select and copy the text.':'テキストを選択してコピーしてください。')}});
 $('downloadTxt').addEventListener('click',()=>{if(results.length)downloadText('demandscope-report.txt',results.map(x=>reportText(x.result,x.name,lang())).join('\n\n'),'text/plain;charset=utf-8');});
 $('downloadFree').addEventListener('click',()=>{if(!results.length)return;downloadText('demandscope-free-results.csv',toCSV([
@@ -98,4 +100,4 @@ function render(){
  $('report').textContent=reportText(r,results[selected].name,lang());requestAnimationFrame(()=>drawHistogram($('hist'),r,lang()));
 }
 window.addEventListener('resize',()=>{if(results.length)drawHistogram($('hist'),results[selected].result,lang())});
-initI18n(()=>{if(inspection)renderSeries();if(results.length)render()});
+initI18n(()=>{if(inspection)renderSeries();if(results.length)render();$('freeFileName').textContent=$('freeFile').files?.[0]?.name||t('ファイルが選択されていません');});

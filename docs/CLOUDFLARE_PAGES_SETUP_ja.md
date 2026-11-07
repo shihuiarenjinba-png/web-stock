@@ -25,14 +25,29 @@ Cloudflare Pagesの **Settings → Variables and Secrets** に設定します。
 | 名前 | 値 | 種別 |
 |---|---|---|
 | `STRIPE_SECRET_KEY` | 既存Stripeアカウントの`sk_test_...` | Secret |
-| `STRIPE_PRO_PRICE_ID` | このアプリ専用のテスト月額`price_...` | Variable |
-| `SESSION_SECRET` | ランダムな32文字以上 | Secret |
-| `APP_ORIGIN` | 生成されたサイトの正確なオリジン（例：`https://web-stock.pages.dev`、末尾 `/` なし） | Variable |
+| `STRIPE_PRO_PRICE_ID` | 任意。未設定なら月額100円のテスト用インラインPriceが使われます。既存NamiData LabのPrice IDを流用しないでください | Variable（任意） |
+| `SESSION_SECRET` | **32文字以上の暗号学的に安全な乱数**。他サービスのセッション秘密値は流用しない | Secret |
+| `APP_ORIGIN` | 任意。設定する場合は `https://web-stock-78r.pages.dev`（末尾 `/` なし） | Variable（任意） |
 | `STRIPE_WEBHOOK_SECRET` | Webhookをテストする場合のみ`whsec_...` | Secret |
 
 `APP_ORIGIN`はサイトURLと完全一致が必要です。プレビューのURLは別オリジンになるため、この試作版の決済テストでは **本番ブランチのPages URL** を使用します。テスト用のStripe Product / Priceが未作成の場合、設定は後回しで構いません。先に無料版を公開してください。**ライブ秘密鍵 `sk_live_` は使用禁止**です。
 
 Proはまだ商用販売に必要な本人認証・契約IDの永続同期を備えていません。**テスト決済だけを行い、有料販売を開始しない**でください。ブラウザ内で計算するJavaScriptは閲覧可能で、Privateリポジトリであってもコードの複製を防ぐものではありません。
+
+
+### 既存NamiData LabのStripe設定を使い、最短でテスト決済する方法
+
+1. **Stripe側は既存のテストアカウントを利用**。DemandScope専用テストポータルは `bpc_1UZ2FNBGa8rL8jwIBPFuUkWT`（テストモード）を使用します。既存NamiData LabのLiveキーや価格は流用しません。
+2. Cloudflare Dashboard → **Workers & Pages → web-stock → Settings → Variables and Secrets** を開き、**Production**に以下2つを追加し、どちらも **Encrypt / Secret** にします。
+   - `STRIPE_SECRET_KEY` = Stripeテストアカウントの `sk_test_...`。以前のWorkerのSecret一覧に**名前**があっても値は再表示できず、別のPagesプロジェクトには自動で引き継がれません。Stripeの **Developers / API keys（テストモード）** でキーを取得し、Cloudflareへ直接貼り付けてください。チャット、GitHub、スクリーンショットに秘密値を含めないでください。
+   - `SESSION_SECRET` = 新規に生成したランダムな秘密値。Windows PowerShellで `[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))` を実行すれば64桁の16進数を生成できます。生成結果はCloudflareへ直接登録。
+3. `APP_ORIGIN`を設定する場合は `https://web-stock-78r.pages.dev` を**平文Variable**で登録してください（末尾スラッシュなし）。未設定でも現行コードは実リクエストのHTTPSオリジンを使用します。
+4. `STRIPE_PRO_PRICE_ID` は今回のテストでは**空欄／未登録**にしてください。月額100円テスト専用のインライン価格がCheckout作成時に使われます。
+5. 保存後、**Productionのデプロイを再実行**。ログに実際のSecret値を表示しないでください。
+6. ブラウザで `https://web-stock-78r.pages.dev/api/entitlement` を開き、`configured:true`を確認（契約前は`active:false`で正常）。`configured:false`の場合はJSONの`missing`に出る**変数名だけ**を確認してください。
+7. `https://web-stock-78r.pages.dev/pro/?lang=ja` からテストCheckoutを開き、Stripeテストカードで決済→同じブラウザで戻り先→Pro開放→契約管理ポータルを確認します。**本番課金禁止**。
+
+**セキュリティ注記**：既存Workerに`STRIPE_SECRET_KEY`があることだけでは、そこに保存された値が`sk_test_`か`sk_live_`かは判断できません。既存のLive Secretをコピーしないでください。既存のWorkerのSecretを削除・上書きしないでください。
 
 ### GitHubをPrivateに切り替える際の注意
 

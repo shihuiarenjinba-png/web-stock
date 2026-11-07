@@ -136,3 +136,12 @@ npx wrangler pages dev public --port 8788
 - サイトの `Pro` 画面で `/api/entitlement` の configured 判定が true になったことを確認した後、Stripeの**テストカード**で決済テストし、`/pro/?session_id=...` の復帰とPro権限開放を検証してください。StripeのDashboard側で成功したCheckoutが作成されたかも確認してください。
 - 無料版の「現在庫」は商品ごとの**今日時点の利用可能な在庫数量**（入力任意）です。`2` は2単位の在庫を意味し、過去需要のデータや選択できる系列数ではありません。需要と同じ単位で入力してください。未入力時には欠品確率を出さず、安全在庫と発注点は算出します。
 - 実際の発注点管理では、手持ち在庫だけでなく**在庫ポジション（手持ち＋発注残−引当済）**を用いてください。欠品率算出時の現在庫と発注点をそのまま同一視しないでください。
+
+## v0.5 Free / Pro の棲み分け
+
+- **Free**：Excel/CSVから最大2系列を選んだ簡易診断。安全在庫・発注点・現在庫がある場合の欠品確率だけを表示し、4列の簡易CSVのみ保存。基準＝7日移動平均、サービスレベル＝95%で固定。
+- **Pro**：最大200系列（試作版）、基準・サービスレベルの変更、詳細パーセンタイル・需要分布、PDF、詳細CSV、シリーズの一括比較。ProはStripeテスト契約をサーバー側で照合。
+- **テスト決済**：既存のStripeテストアカウントを利用し、月額100円の**テスト専用**インラインPrice。実際の請求なし。既存NamiData Labの商品・料金は変更しない。テストでは`STRIPE_PRO_PRICE_ID`不要。
+- **Cloudflare必須設定**：Pages > `web-stock` > Settings > Variables and Secrets で、Production環境の`STRIPE_SECRET_KEY`（`sk_test_`で始まる）と`SESSION_SECRET`（暗号学的乱数32字以上）を**Encrypt**で登録。設定後に再デプロイ。秘密鍵をGitやチャットに貼らない。Stripe MCPの接続だけではCloudflareのSecretは作成されない。
+- **検証**：`/api/entitlement`で`configured:true`が返った後、`/pro/`でStripe Checkoutのテストカード決済と戻り先、契約認証まで実地確認する。Cloudflare実環境での完走まで`SALE_READY`としない。
+- **商用化注意**：無料画面からの非表示は機能境界・導線設計であり、クライアントJSのコピー防止にはならない。認証・契約管理・課金状態の恒久的検証は販売前に別途完成させる必要がある。

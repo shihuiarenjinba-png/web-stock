@@ -2,7 +2,6 @@ import {drawHistogram} from './chart.js';
 import {analyze,parseDemand,SAMPLE,formatNumber,riskLabel,reportText} from './logic.js';
 import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './importer.js';
 import {initI18n,lang,t,errorMessage,applyI18n} from './i18n.js';
-import {printRiskReport} from './pdf-report.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
 const form=$('form'),status=$('status');
 let workbook=null,inspection=null, results=[],selected=0, fileReadSequence=0;
@@ -62,7 +61,7 @@ $('freeImportRun').addEventListener('click',()=>{
    results=series.map(s=>{
      const box=[...$('freeSeries').querySelectorAll('input[type=checkbox]')].find(el=>el.value===s.key)?.closest('label')?.querySelector('.series-stock');
      const raw=box?.value?.trim();const inv=raw?Number(raw):(series.length===1&&$('inventory').value.trim()!==''?Number($('inventory').value):null);
-     return {name:s.name,result:analyze({demand:s.values,leadTime:Number($('lead').value),service:Number($('service').value),method:$('method').value,window:Number($('window').value),inventory:inv})};
+     return {name:s.name,result:analyze({demand:s.values,leadTime:Number($('lead').value),service:95,method:'sma',window:7,inventory:inv})};
    });
    selected=0;render();
    if(series.length>1)notify(lang()==='en'?'Two series analyzed. Add stock per series to estimate stockout probability.':'2系列を分析しました。在庫切れ確率は各系列の在庫入力から算出します。');
@@ -75,16 +74,13 @@ $('method').addEventListener('change',()=>{$('windowField').classList.toggle('hi
 $('sample').addEventListener('click',()=>{$('data').value=SAMPLE.join(', ');$('inventory').value=390;clearError();form.requestSubmit();});
 form.addEventListener('submit',e=>{e.preventDefault();clearError();try{
  const inv=$('inventory').value.trim()===''?null:Number($('inventory').value);
- const result=analyze({demand:parseDemand($('data').value),leadTime:Number($('lead').value),service:Number($('service').value),method:$('method').value,window:Number($('window').value),inventory:inv});
+ const result=analyze({demand:parseDemand($('data').value),leadTime:Number($('lead').value),service:95,method:'sma',window:7,inventory:inv});
  results=[{name:lang()==='en'?'Manual series':'手動入力',result}];selected=0;render();
 }catch(err){error(err);status.textContent=lang()==='en'?'Input error':'入力エラー';status.classList.add('pending-tag');}});
 $('sampleCsv').addEventListener('click',()=>{const vals=SAMPLE.map((n,i)=>[i+1,n,Math.max(0,n+((i%5)-2)*3)]);downloadText('demandscope-sample-2-series.csv',toCSV([['Day','SKU-A','SKU-B'],...vals]));notify(lang()==='en'?'Two-series sample CSV saved.':'2系列のCSVサンプルを保存しました。');});
-$('downloadPdf').addEventListener('click',()=>{if(!results.length)return;notify(printRiskReport({results,language:lang(),chartCanvas:results.length===1?$('hist'):null}));});
-$('copy').addEventListener('click',async()=>{if(!results.length)return;const text=results.map(x=>reportText(x.result,x.name,lang())).join('\n\n');try{await navigator.clipboard.writeText(text);notify(lang()==='en'?'Copied.':'コピーしました。')}catch{notify(lang()==='en'?'Select and copy the text.':'テキストを選択してコピーしてください。')}});
-$('downloadTxt').addEventListener('click',()=>{if(results.length)downloadText('demandscope-report.txt',results.map(x=>reportText(x.result,x.name,lang())).join('\n\n'),'text/plain;charset=utf-8');});
-$('downloadFree').addEventListener('click',()=>{if(!results.length)return;downloadText('demandscope-free-results.csv',toCSV([
- [lang()==='en'?'Series':'系列','Daily baseline','Residual SD','Lead-time mean','Lead-time SD','P50','P90','P95','P99','Safety stock','Reorder point','Stockout (%)','Latest z-score','Runs'],
- ...results.map(({name,result:r})=>[name,r.futureBaseline,r.sigma,r.mean,r.sd,r.median,r.p90,r.p95,r.p99,r.safetyStock,r.reorderPoint,r.stockout??'',r.lastZ??'',r.runs])
+$('downloadFree').addEventListener('click',()=>{if(!results.length)return;downloadText('demandscope-free-summary.csv',toCSV([
+ [lang()==='en'?'Series':'系列',lang()==='en'?'Safety stock':'安全在庫',lang()==='en'?'Reorder point':'発注点',lang()==='en'?'Stockout (%)':'欠品確率 (%)'],
+ ...results.map(({name,result:r})=>[name,r.safetyStock,r.reorderPoint,r.stockout??''])
 ]));});
 function render(){
  if(!results.length)return;

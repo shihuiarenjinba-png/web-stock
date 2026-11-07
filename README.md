@@ -127,3 +127,12 @@ npx wrangler pages dev public --port 8788
 - Existing NamiData Lab pricing is untouched; this pilot must not accept live cards or a live Stripe key.
 - PDF output requires a browser with Save as PDF printing. It does not directly stream a PDF from the server.
 - **Live Cloudflare Stripe transaction has not yet been verified** (needs user to configure Secrets). Do not enable real billing until user identity, subscriptions, taxes, and security tests are completed.
+
+## 2026-11-07 Stripeテスト設定と現在庫入力の説明
+
+- 既存NamiData Labテストアカウントに、DemandScope専用のカスタマーポータル設定 `bpc_1UZ2FNBGa8rL8jwIBPFuUkWT` を作成しました。デフォルトの既存ポータルは変更していません。
+- `/api/portal` はこのテストポータルを使用します。別Stripeテストアカウントを使う場合は `STRIPE_PORTAL_CONFIG_ID` を別のIDに変更してください。
+- **重要**: Stripe MCPでCloudflareのSecretは設定できません。Cloudflare Pages > Settings > Variables and Secrets (Production) に `STRIPE_SECRET_KEY` (`sk_test_...`) と `SESSION_SECRET`（32文字以上の暗号学的に安全な値）をSecretとして登録し、再デプロイしてください。価格IDは月額100円のテスト用inline priceを使う場合は不要です。
+- サイトの `Pro` 画面で `/api/entitlement` の configured 判定が true になったことを確認した後、Stripeの**テストカード**で決済テストし、`/pro/?session_id=...` の復帰とPro権限開放を検証してください。StripeのDashboard側で成功したCheckoutが作成されたかも確認してください。
+- 無料版の「現在庫」は商品ごとの**今日時点の利用可能な在庫数量**（入力任意）です。`2` は2単位の在庫を意味し、過去需要のデータや選択できる系列数ではありません。需要と同じ単位で入力してください。未入力時には欠品確率を出さず、安全在庫と発注点は算出します。
+- 実際の発注点管理では、手持ち在庫だけでなく**在庫ポジション（手持ち＋発注残−引当済）**を用いてください。欠品率算出時の現在庫と発注点をそのまま同一視しないでください。

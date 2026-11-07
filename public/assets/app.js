@@ -36,9 +36,11 @@ function renderSeries(){
    });
    const name=document.createElement('span');name.className='series-name';name.textContent=s.name;
    const size=document.createElement('span');size.className='series-count';size.textContent=`${s.length} ${lang()==='en'?'days':'期'}`;
-   const stock=document.createElement('input');stock.type='number';stock.className='series-stock';stock.min='0';stock.step='any';stock.placeholder=lang()==='en'?'Stock':'在庫';stock.title=lang()==='en'?'On-hand stock (optional)':'現在庫（任意）';stock.setAttribute('aria-label',`${s.name} ${lang()==='en'?'stock':'現在庫'}`);stock.value=previous.get(s.key)?.stock||'';
+   const stockCell=document.createElement('span');stockCell.className='series-stock-cell';
+   const stockCaption=document.createElement('span');stockCaption.className='series-stock-caption';stockCaption.textContent=lang()==='en'?'On-hand (units)':'現在庫（個）';
+   const stock=document.createElement('input');stock.type='number';stock.className='series-stock';stock.min='0';stock.step='any';stock.placeholder=lang()==='en'?'e.g. 120':'例：120';stock.title=lang()==='en'?'Actual on-hand quantity (optional), not historical demand':'実際の現在庫数（任意）。過去の需要ではありません';stock.setAttribute('aria-label',`${s.name} ${lang()==='en'?'on-hand inventory in units':'現在庫（個）'}`);stock.value=previous.get(s.key)?.stock||'';
    stock.addEventListener('click',e=>e.stopPropagation());
-   wrap.append(input,name,size,stock);root.append(wrap);
+   stockCell.append(stockCaption,stock);wrap.append(input,name,size,stockCell);root.append(wrap);
  });
  refreshLimits();
  if(!all.length){root.textContent=lang()==='en'?'No complete numeric demand series found. Choose another sheet or direction.':'数値の需要系列が検出されませんでした。シートまたは方向を変更してください。';}

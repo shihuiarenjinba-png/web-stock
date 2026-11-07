@@ -60,3 +60,6 @@
  #pdf-print-area .pdf-plot{width:100%;max-height:75mm;object-fit:contain;border:1px solid #d9e1e4}
  #pdf-print-area .pdf-muted{font-size:8pt;color:#62737b}#pdf-print-area .pdf-newpage{break-before:page}
 }
+
+/* Clear meaning of per-SKU stock entry: not historical demand. */
+.stock-explanation{margin:4px 0 10px;line-height:1.6;max-width:68ch}.series-stock-cell{flex:0 0 108px;display:flex;align-items:stretch;flex-direction:column;gap:3px;min-width:0}.series-stock-caption{font-size:10px;color:#90c9c5;white-space:nowrap;text-align:center}.series-item .series-stock-cell input.series-stock{width:100%!important;flex:0 0 auto!important;height:31px;font-size:12px}.series-item .series-stock-cell input.series-stock::placeholder{font-size:10px;color:#8aa3b6}@media(max-width:420px){.series-stock-cell{flex-basis:94px}.series-item{gap:5px}.series-item .series-count{font-size:10px}}

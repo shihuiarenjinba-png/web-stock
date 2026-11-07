@@ -61,3 +61,23 @@ test('only this app can authorize inline-price test subscriptions',async()=>{
  globalThis.fetch=async()=>new Response(JSON.stringify({...inline,items:{data:[{price:{currency:'jpy',unit_amount:9800,recurring:{interval:'month'}}}]}}));assert.equal(await verifiedSubscription(env2,'sub_test123'),null);
  }finally{globalThis.fetch=old}
 });
+
+
+test('DemandScope uses dedicated test customer portal configuration',async()=>{
+ const {onRequestPost: portal}=await import('../functions/api/portal.js');
+ const old=globalThis.fetch;const calls=[];
+ try{
+   globalThis.fetch=async(url,opts)=>{
+      calls.push({url,form:opts?.body?new URLSearchParams(opts.body):null});
+      if(url.includes('/subscriptions/'))return new Response(JSON.stringify(sub));
+      if(url.includes('/billing_portal/sessions'))return new Response(JSON.stringify({url:'https://billing.stripe.com/p/session_test'}));
+      return new Response('{}',{status:404});
+   };
+   const cookie=(await issueCookie('sub_test123','cus_test123',env,false)).split(';')[0];
+   const res=await portal({request:request('/api/portal',undefined,{}, {Cookie:cookie}),env});
+   assert.equal(res.status,200);
+   const form=calls.find(x=>x.url.includes('/billing_portal/sessions'))?.form;
+   assert.equal(form?.get('configuration'),'bpc_1UZ2FNBGa8rL8jwIBPFuUkWT');
+   assert.equal(form?.get('return_url'),'http://localhost:8788/pro/');
+ }finally{globalThis.fetch=old}
+});

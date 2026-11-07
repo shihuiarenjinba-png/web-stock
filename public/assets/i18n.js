@@ -80,6 +80,13 @@ const en={
 '動作確認用ファイル':'Try sample files','CSV（2商品）':'CSV (2 SKUs)','Excel（5商品）':'Excel (5 SKUs)','行方向CSV':'Rows CSV','PDF出力':'Export PDF',
 'Proの操作':'Pro workflow','検出系列を分割または合算':'Split or sum detected series','登録後に一括分析・PDF保存':'Run batch and export PDF',
 'テスト用100円/月（Stripeテストカードで支払うため実際の請求はありません）。販売価格ではありません。':'Test checkout: ¥100/month using a Stripe test card only. No real charges. Not the final price.',
+'簡易結果を確認':'Review quick results',
+'無料版は2系列までの簡易診断です。詳細統計・グラフ・PDF出力・複数商品管理はProで利用できます。':'Free provides quick checks for up to two series. Detailed statistics, charts, PDF exports and multi-product management are available in Pro.',
+'無料版は簡易診断のみ':'Free quick check',
+'2商品まで、安全在庫・発注点・在庫切れ確率の目安を確認できます。詳細な需要分布、パーセンタイル、PDFレポート、分析条件のカスタマイズはPro専用です。':'Check safety stock, reorder points and stockout probability for up to two products. Full distributions, percentiles, PDF reports and scenario settings are Pro-only.',
+'簡易結果をCSV保存':'Download basic CSV',
+'Proで詳細分析を見る':'Explore full analysis in Pro',
+'簡易診断 / サービスレベル95%固定 / 7日移動平均 / 正規分布・独立需要の仮定':'Quick check / fixed 95% service level / 7-day moving average / independent normal demand assumption',
 };
 let current='ja';const orig=new WeakMap();
 export const lang=()=>current;

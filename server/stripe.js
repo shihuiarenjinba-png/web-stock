@@ -1,6 +1,16 @@
 const enc=new TextEncoder();
 export function json(body,status=200,headers={}) {const h=new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});if(headers instanceof Headers){headers.forEach((value,key)=>h.append(key,value));}else for(const [key,value] of Object.entries(headers))h.append(key,value);return new Response(JSON.stringify(body),{status,headers:h})}
-export function isConfigured(env) {return typeof env.STRIPE_SECRET_KEY==='string'&&env.STRIPE_SECRET_KEY.startsWith('sk_test_')&&typeof env.STRIPE_PRO_PRICE_ID==='string'&&env.STRIPE_PRO_PRICE_ID.startsWith('price_')&&typeof env.SESSION_SECRET==='string'&&env.SESSION_SECRET.length>=32&&typeof env.APP_ORIGIN==='string'&&/^https?:\/\//.test(env.APP_ORIGIN)}
+export function isConfigured(env) {
+ if(!env || typeof env.STRIPE_SECRET_KEY!=='string'||!env.STRIPE_SECRET_KEY.startsWith('sk_test_')||
+ typeof env.STRIPE_PRO_PRICE_ID!=='string'||!env.STRIPE_PRO_PRICE_ID.startsWith('price_')||
+ typeof env.SESSION_SECRET!=='string'||env.SESSION_SECRET.length<32||typeof env.APP_ORIGIN!=='string')return false;
+ try{
+  const url=new URL(env.APP_ORIGIN);
+  // Only the exact published origin is accepted; no path, query, credentials or trailing slash.
+  if(url.origin!==env.APP_ORIGIN)return false;
+  return url.protocol==='https:'||(url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname));
+ }catch{return false}
+}
 export function origin(env){return new URL(env.APP_ORIGIN).origin}
 export function validOrigin(request,env){const h=request.headers.get('Origin');return h===origin(env)}
 export async function stripe(env,path,form){if(!isConfigured(env))throw new Error('Stripe test configuration is not complete');const opts={method:form?'POST':'GET',headers:{'Authorization':`Bearer ${env.STRIPE_SECRET_KEY}`,'Stripe-Version':'2025-09-30.clover'}};if(form){opts.headers['Content-Type']='application/x-www-form-urlencoded';opts.body=new URLSearchParams(form)}const res=await fetch(`https://api.stripe.com/v1${path}`,opts);const data=await res.json();if(!res.ok)throw new Error(data.error?.message||'Stripe API error');return data}

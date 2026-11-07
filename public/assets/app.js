@@ -4,7 +4,15 @@ import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './imp
 import {initI18n,lang,t,errorMessage} from './i18n.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
 const form=$('form'),status=$('status');
-let workbook=null,inspection=null, results=[],selected=0;
+let workbook=null,inspection=null, results=[],selected=0, fileReadSequence=0;
+function invalidateResults(){
+ if(!results.length)return;
+ results=[];selected=0;
+ $('empty').classList.remove('hidden');$('results').classList.add('hidden');$('freeMulti').classList.add('hidden');
+ status.textContent=lang()==='en'?'Input changed — run again':'入力を変更しました・再実行してください';
+ status.classList.add('pending-tag');
+}
+
 function notify(s){const n=$('toast');n.textContent=s;n.classList.remove('hidden');setTimeout(()=>n.classList.add('hidden'),2500);}
 function error(e){const n=$('error');n.textContent=errorMessage(e);n.classList.remove('hidden');}
 function clearError(){$('error').classList.add('hidden')}
@@ -36,12 +44,13 @@ function renderSeries(){
 }
 function refreshLimits(){const root=$('freeSeries'),checked=root.querySelectorAll('input:checked').length;root.querySelectorAll('input[type=checkbox]').forEach(c=>{c.disabled=checked>=2&&!c.checked;c.closest('label').classList.toggle('limit-disabled',c.disabled);})}
 $('freeFile').addEventListener('change',async e=>{
+ const fileSequence=++fileReadSequence;
  clearError();results=[];$('empty').classList.remove('hidden');$('results').classList.add('hidden');$('freeMulti').classList.add('hidden');$('status').textContent=lang()==='en'?'Not run':'未実行';$('status').classList.add('pending-tag');$('freeImport').classList.add('hidden');workbook=null;inspection=null;
- try{if(!e.target.files?.[0])return;workbook=await loadWorkbook(e.target.files[0]);options($('freeSheet'),workbook.sheets.map(s=>s.name));readSheet();$('freeImport').classList.remove('hidden');}
- catch(err){error(err)}
+ try{if(!e.target.files?.[0])return;const loaded=await loadWorkbook(e.target.files[0]);if(fileSequence!==fileReadSequence)return;workbook=loaded;options($('freeSheet'),workbook.sheets.map(s=>s.name));readSheet();$('freeImport').classList.remove('hidden');}
+ catch(err){if(fileSequence===fileReadSequence)error(err)}
 });
 $('freeSheet').addEventListener('change',()=>{try{results=[];$('empty').classList.remove('hidden');$('results').classList.add('hidden');$('status').textContent=lang()==='en'?'Not run':'未実行';readSheet();clearError()}catch(e){error(e)}});
-$('freeOrientation').addEventListener('change',renderSeries);
+$('freeOrientation').addEventListener('change',()=>{invalidateResults();renderSeries()});
 $('freeImportRun').addEventListener('click',()=>{
  clearError();try{
    const keys=[...$('freeSeries').querySelectorAll('input:checked')].map(el=>el.value);
@@ -56,6 +65,9 @@ $('freeImportRun').addEventListener('click',()=>{
    if(series.length>1)notify(lang()==='en'?'Two series analyzed. Add stock per series to estimate stockout probability.':'2系列を分析しました。在庫切れ確率は各系列の在庫入力から算出します。');
  }catch(e){error(e)}
 });
+for(const id of ['data','lead','service','inventory','method','window'])$(id).addEventListener('input',invalidateResults);
+$('freeSeries').addEventListener('input',invalidateResults);
+$('freeSeries').addEventListener('change',invalidateResults);
 $('method').addEventListener('change',()=>{$('windowField').classList.toggle('hidden',$('method').value!=='sma')});
 $('sample').addEventListener('click',()=>{$('data').value=SAMPLE.join(', ');$('inventory').value=390;clearError();form.requestSubmit();});
 form.addEventListener('submit',e=>{e.preventDefault();clearError();try{

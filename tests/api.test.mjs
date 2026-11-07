@@ -26,3 +26,14 @@ test('checkout activation binds to initiating browser and rejects replay',async(
  const err=await activate({request:request('/api/activate','https://evil.test',{session_id:'cs_test_valid_session_123'},{Cookie:cookie}),env});assert.equal(err.status,403);
  }finally{globalThis.fetch=old}});
 
+
+test('reject malformed or insecure production APP_ORIGIN before Stripe calls',()=>{
+ assert.equal(isConfigured({...env,APP_ORIGIN:'https://user:secret@example.com'}),false);
+ assert.equal(isConfigured({...env,APP_ORIGIN:'https://example.com/path'}),false);
+ assert.equal(isConfigured({...env,APP_ORIGIN:'https://example.com/'}),false);
+ assert.equal(isConfigured({...env,APP_ORIGIN:'http://example.com'}),false);
+ assert.equal(isConfigured({...env,APP_ORIGIN:'javascript:alert(1)'}),false);
+ assert.equal(isConfigured({...env,APP_ORIGIN:'https://demand.example.com'}),true);
+ assert.equal(isConfigured({...env,APP_ORIGIN:'http://localhost:8788'}),true);
+ assert.equal(isConfigured(null),false);
+});

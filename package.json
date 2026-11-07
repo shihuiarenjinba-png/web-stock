@@ -6,8 +6,9 @@
   "description": "Bilingual in-browser Excel/CSV demand series import, Monte Carlo risk analytics and Stripe test-only Pro pilot",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "check": "npm test && node --check public/assets/logic.js && node --check public/assets/importer.js && node --check public/assets/app.js && node --check public/assets/pro.js && node --check server/stripe.js",
+    "build": "npm run check && node scripts/verify-pages.mjs",
     "dev": "npx wrangler pages dev public",
-    "deploy": "npx wrangler pages deploy public --project-name demand-risk-simulator",
-    "check": "npm test && node --check public/assets/logic.js && node --check public/assets/importer.js && node --check public/assets/app.js && node --check public/assets/pro.js && node --check server/stripe.js"
+    "deploy:pages:manual": "npx wrangler pages deploy public --project-name web-stock"
   }
 }

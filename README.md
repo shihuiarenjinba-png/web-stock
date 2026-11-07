@@ -2,6 +2,8 @@
 
 **日本語 / English · ファイルアップロード中心 · Cloudflare Pages + Stripe TEST環境対応**
 
+**Cloudflareに接続する際は、[Pages Git連携の設定手順](docs/CLOUDFLARE_PAGES_SETUP_ja.md)を先に参照してください。Workers Buildsの `npx wrangler deploy` は本リポジトリには使用しません。**
+
 会計機能を含まない、過去需要の残差標準偏差と4,000回のモンテカルロ試行による需要・在庫リスクの意思決定支援Webアプリです。需要データの読み込み・計算・CSVレポート出力はすべてブラウザ内で実行し、サーバーへ送信しません。
 
 ## できること
@@ -38,7 +40,7 @@
 
 ```bash
 cd demand-risk-simulator
-npm test
+npm run build
 python -m http.server 8765 --directory public
 ```
 
@@ -108,7 +110,7 @@ npx wrangler pages dev public --port 8788
 
 ## 初期監査（2026-11-07）
 
-- GitHub初期インポートに向け、決済Session IDの横流し再利用に対するブラウザ紐づけを追加。決済完了URLのクエリパラメータも読み取り直後に消去します。Stripe Checkout Sessionの`client_reference_id`を検証してから署名Cookieを発行します。
+- GitHub初期インポートに向け、決済Session IDの横流し再利用に対するブラウザ紐づけを追加。Stripe Checkout Sessionの`client_reference_id`を検証してから署名Cookieを発行します。
 - Pro一括処理はSKUごとにUIへ制御を返し、成功/失敗件数を表示。上限2,500万日次抽選を超えた場合は明示的に停止します。
 - 無料版で新しいファイルを開くと旧結果は非表示になります。
 - CSPなど静的ページのセキュリティヘッダを追加しました。

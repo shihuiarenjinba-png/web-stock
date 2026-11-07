@@ -63,3 +63,13 @@
 
 /* Clear meaning of per-SKU stock entry: not historical demand. */
 .stock-explanation{margin:4px 0 10px;line-height:1.6;max-width:68ch}.series-stock-cell{flex:0 0 108px;display:flex;align-items:stretch;flex-direction:column;gap:3px;min-width:0}.series-stock-caption{font-size:10px;color:#90c9c5;white-space:nowrap;text-align:center}.series-item .series-stock-cell input.series-stock{width:100%!important;flex:0 0 auto!important;height:31px;font-size:12px}.series-item .series-stock-cell input.series-stock::placeholder{font-size:10px;color:#8aa3b6}@media(max-width:420px){.series-stock-cell{flex-basis:94px}.series-item{gap:5px}.series-item .series-count{font-size:10px}}
+
+/* Freemium boundary: basic figures only; full distribution and exports live in Pro. */
+.free-hidden-controls {display:none!important;}
+.result-panel .two-col, .result-panel .space, .result-panel .subhead, .result-panel .subhead + .quick-stats, .result-panel .insight, .result-panel .warn, .result-panel .export{display:none!important;}
+.free-lite-note {margin:18px 0 0;padding:18px;border:1px solid #2b686f;background:rgba(23,94,101,.18);border-radius:12px;line-height:1.7}
+.free-lite-note strong {display:block;color:#9af7e9;font-size:14px}
+.free-lite-note p {margin:6px 0 12px;color:#b8ccd7;font-size:13px}
+.free-lite-actions {display:flex;gap:9px;flex-wrap:wrap}
+.free-lite-actions .btn {width:auto;max-width:100%;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;}
+@media(max-width:560px){.free-lite-actions{flex-direction:column}.free-lite-actions .btn{width:100%}}

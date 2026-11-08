@@ -2,11 +2,12 @@ const enc=new TextEncoder();
 export function json(body,status=200,headers={}) {const h=new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});if(headers instanceof Headers){headers.forEach((value,key)=>h.append(key,value));}else for(const [key,value] of Object.entries(headers))h.append(key,value);return new Response(JSON.stringify(body),{status,headers:h})}
 // Stripe test-only pilot. APP_ORIGIN and Price ID are optional; when the Price ID
 // is absent, Checkout creates an inline recurring price for a JPY100 test plan.
-// Production/livemode keys are explicitly rejected.
+// Production/livemode keys (sk_live_ / rk_live_) are explicitly rejected.
+// Restricted rk_test_ keys require narrowly-scoped Stripe API permissions at Stripe.
 export const TEST_MONTHLY_JPY = 100;
 export function configurationMissing(env){
  const missing=[];
- if(typeof env?.STRIPE_SECRET_KEY!=='string'||!env.STRIPE_SECRET_KEY.startsWith('sk_test_'))missing.push('STRIPE_SECRET_KEY');
+ if(typeof env?.STRIPE_SECRET_KEY!=='string'||!(env.STRIPE_SECRET_KEY.startsWith('sk_test_')||env.STRIPE_SECRET_KEY.startsWith('rk_test_')))missing.push('STRIPE_SECRET_KEY');
  if(typeof env?.SESSION_SECRET!=='string'||env.SESSION_SECRET.length<32)missing.push('SESSION_SECRET');
  if(env?.STRIPE_PRO_PRICE_ID && !/^price_[A-Za-z0-9]+$/.test(env.STRIPE_PRO_PRICE_ID))missing.push('STRIPE_PRO_PRICE_ID');
  if(env?.APP_ORIGIN){try{const u=new URL(env.APP_ORIGIN);if(u.origin!==env.APP_ORIGIN||!(u.protocol==='https:'||(u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname))))missing.push('APP_ORIGIN');}catch{missing.push('APP_ORIGIN')}}

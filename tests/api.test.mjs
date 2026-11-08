@@ -81,3 +81,18 @@ test('DemandScope uses dedicated test customer portal configuration',async()=>{
    assert.equal(form?.get('return_url'),'http://localhost:8788/pro/');
  }finally{globalThis.fetch=old}
 });
+
+
+test('restricted test API key is allowed; restricted live API key is rejected',async()=>{
+ const restricted={...env,STRIPE_SECRET_KEY:'rk_test_sample_restricted_123'};
+ assert.equal(isConfigured(restricted),true);
+ assert.equal(isConfigured({...restricted,STRIPE_SECRET_KEY:'rk_live_never_allowed_123'}),false);
+ assert.equal(configurationMissing(restricted).length,0);
+ const old=globalThis.fetch;let seenHeader='';
+ try {
+   globalThis.fetch=async (_url,opts)=>{seenHeader=opts.headers.Authorization;return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};
+   const res=await checkout({request:request('/api/checkout',undefined,{}),env:restricted});
+   assert.equal(res.status,200);
+   assert.equal(seenHeader,'Bearer rk_test_sample_restricted_123');
+ }finally{globalThis.fetch=old}
+});

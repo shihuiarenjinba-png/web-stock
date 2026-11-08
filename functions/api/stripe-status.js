@@ -1,8 +1,8 @@
-import {json,isConfigured,configurationMissing,stripe,StripeApiError} from '../../server/stripe.js';
+import {json,isConfigured,configurationMissing,configurationDiagnostics,stripe,StripeApiError} from '../../server/stripe.js';
 
 export async function onRequestGet({env}){
  const missing=configurationMissing(env);
- if(missing.length)return json({configured:false,reachable:false,missing,mode:'test'});
+ if(missing.length)return json({configured:false,reachable:false,missing,issues:configurationDiagnostics(env),mode:'test'});
  const key_type=env.STRIPE_SECRET_KEY?.startsWith('rk_test_')?'restricted_test':env.STRIPE_SECRET_KEY?.startsWith('sk_test_')?'secret_test':'unknown';
  try{
    await stripe(env,'/checkout/sessions?limit=1');

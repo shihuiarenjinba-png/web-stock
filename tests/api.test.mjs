@@ -10,7 +10,7 @@ const sess={livemode:false,mode:'subscription',status:'complete',payment_status:
 const sub={livemode:false,status:'active',metadata:{app:'demand-scope-pro'},customer:'cus_test123',items:{data:[{price:{id:'price_valid'}}]}};
 test('test-mode-only config',()=>{assert.ok(isConfigured(env));assert.ok(!isConfigured({...env,STRIPE_SECRET_KEY:'sk_live_forbidden'}));assert.ok(!isConfigured({...env,SESSION_SECRET:'short'}))});
 test('reject wrong origin before Stripe',async()=>{const res=await checkout({request:request('/api/checkout','https://evil.test',{}),env});assert.equal(res.status,403)});
-test('verify unavailable without secrets',async()=>{const res=await verify({request:request('/api/entitlement'),env:{}});assert.deepEqual(await res.json(),{active:false,configured:false,missing:['STRIPE_SECRET_KEY','SESSION_SECRET'],mode:'test'})});
+test('verify unavailable without secrets',async()=>{const res=await verify({request:request('/api/entitlement'),env:{}});const body=await res.json();assert.equal(body.active,false);assert.equal(body.configured,false);assert.deepEqual(body.missing,['STRIPE_SECRET_KEY','SESSION_SECRET']);assert.deepEqual(body.issues,[{name:'STRIPE_SECRET_KEY',reason:'missing'},{name:'SESSION_SECRET',reason:'missing'}]);assert.equal(body.mode,'test')});
 test('checkout uses configured Price ID only',async()=>{const old=globalThis.fetch;try{let seen=null;globalThis.fetch=async(_url,opt)=>{seen=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};const res=await checkout({request:request('/api/checkout',undefined,{}),env});assert.equal(res.status,200);assert.equal(seen.get('line_items[0][price]'),'price_valid');assert.equal(seen.get('mode'),'subscription');assert.match(seen.get('client_reference_id'),/^[A-Za-z0-9_-]{40,50}$/);assert.match(res.headers.get('Set-Cookie'),/demand_checkout=/);assert.match(seen.get('success_url'),/session_id=/)}finally{globalThis.fetch=old}});
 test('signed entitlement returns false on tampered cookie, active on valid cookie',async()=>{const old=globalThis.fetch;try{globalThis.fetch=async()=>new Response(JSON.stringify(sub));const cookie=(await issueCookie('sub_test123','cus_test123',env,false)).split(';')[0];assert.ok(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie}),env));assert.equal(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie+'x'}),env),null);const bad=await verifiedSubscription(env,'sub_test123');assert.equal(bad.status,'active');globalThis.fetch=async()=>new Response(JSON.stringify({...sub,status:'canceled'}));assert.equal(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie}),env),null)}finally{globalThis.fetch=old}});
 test('checkout activation binds to initiating browser and rejects replay',async()=>{const old=globalThis.fetch;try{
@@ -115,4 +115,13 @@ test('stripe-status safely reports restricted-key permission failure',async()=>{
   const res=await status({env:{STRIPE_SECRET_KEY:'rk_test_status_diag',SESSION_SECRET:'E'.repeat(48)}});const body=await res.json();
   assert.equal(body.configured,true);assert.equal(body.reachable,false);assert.equal(body.key_type,'restricted_test');assert.equal(body.request_id,'req_health_123');assert.ok(!JSON.stringify(body).includes('rk_test_status_diag'));
  }finally{globalThis.fetch=old}
+});
+
+
+test('configuration diagnostics distinguish missing, short session and wrong Stripe key format',async()=>{
+ const {configurationDiagnostics}=await import('../server/stripe.js');
+ assert.deepEqual(configurationDiagnostics({}).map(x=>[x.name,x.reason]),[['STRIPE_SECRET_KEY','missing'],['SESSION_SECRET','missing']]);
+ assert.ok(configurationDiagnostics({STRIPE_SECRET_KEY:'rk_test_ok',SESSION_SECRET:'short'}).some(x=>x.name==='SESSION_SECRET'&&x.reason==='too_short'));
+ assert.ok(configurationDiagnostics({STRIPE_SECRET_KEY:'rk_live_not_allowed',SESSION_SECRET:'X'.repeat(40)}).some(x=>x.name==='STRIPE_SECRET_KEY'&&x.reason==='test_key_format'));
+ assert.equal(configurationDiagnostics({STRIPE_SECRET_KEY:'rk_test_ok',SESSION_SECRET:'X'.repeat(40)}).length,0);
 });

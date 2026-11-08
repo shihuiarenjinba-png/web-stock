@@ -15,7 +15,17 @@ async function checkStripeHealth(){
   const res=await fetch('/api/stripe-status',{cache:'no-store'});
   stripeHealth=await res.json();
   const el=$('stripeHealth');
-  if(!stripeHealth.configured){el.textContent=lang()==='en'?'Stripe secrets are not configured.':'Stripe Secretが未設定です。';el.className='stripe-health bad';return}
+  if(!stripeHealth.configured){
+   const labels=(stripeHealth.issues||[]).map(i=>{
+    if(i.name==='STRIPE_SECRET_KEY'&&i.reason==='test_key_format')return lang()==='en'?'Stripe key is not sk_test_ / rk_test_':'Stripeキーが sk_test_ / rk_test_ 形式ではありません';
+    if(i.name==='STRIPE_SECRET_KEY')return lang()==='en'?'Stripe key is missing':'STRIPE_SECRET_KEYが未登録です';
+    if(i.name==='SESSION_SECRET'&&i.reason==='too_short')return lang()==='en'?'SESSION_SECRET is shorter than 32 characters':'SESSION_SECRETが32文字未満です';
+    if(i.name==='SESSION_SECRET')return lang()==='en'?'SESSION_SECRET is missing':'SESSION_SECRETが未登録です';
+    return i.name;
+   });
+   el.textContent=(lang()==='en'?'Setup problem: ':'設定エラー: ')+(labels.join(' / ')||stripeHealth.missing?.join(', ')||'unknown');
+   el.className='stripe-health bad';return
+  }
   if(stripeHealth.reachable){el.textContent=lang()==='en'?'✓ Stripe API reachable ('+stripeHealth.key_type+')':'✓ Stripe API接続済み（'+stripeHealth.key_type+'）';el.className='stripe-health good';return}
   el.textContent=(lang()==='en'?'Stripe API unreachable: ':'Stripe API未接続: ')+(stripeHealth.detail||stripeHealth.hint||'unknown error');
   el.className='stripe-health bad';

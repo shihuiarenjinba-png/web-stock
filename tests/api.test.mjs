@@ -96,3 +96,23 @@ test('restricted test API key is allowed; restricted live API key is rejected',a
    assert.equal(seenHeader,'Bearer rk_test_sample_restricted_123');
  }finally{globalThis.fetch=old}
 });
+
+
+test('Stripe API errors preserve safe diagnostic fields without exposing credentials',async()=>{
+ const old=globalThis.fetch;
+ try{
+  globalThis.fetch=async()=>new Response(JSON.stringify({error:{type:'invalid_request_error',code:'permission_missing',message:'This API key does not have permission to perform this request.',param:null}}),{status:403,headers:{'request-id':'req_test_diag_123','content-type':'application/json'}});
+  const res=await checkout({request:request('/api/checkout',undefined,{}),env:{STRIPE_SECRET_KEY:'rk_test_restricted_diag',SESSION_SECRET:'D'.repeat(48)}});
+  assert.equal(res.status,502);const body=await res.json();
+  assert.equal(body.stripe_code,'permission_missing');assert.equal(body.request_id,'req_test_diag_123');assert.match(body.hint,/Checkout Sessions/);assert.ok(!JSON.stringify(body).includes('rk_test_restricted_diag'));
+ }finally{globalThis.fetch=old}
+});
+test('stripe-status safely reports restricted-key permission failure',async()=>{
+ const {onRequestGet:status}=await import('../functions/api/stripe-status.js');
+ const old=globalThis.fetch;
+ try{
+  globalThis.fetch=async()=>new Response(JSON.stringify({error:{type:'invalid_request_error',message:'permission denied'}}),{status:403,headers:{'request-id':'req_health_123','content-type':'application/json'}});
+  const res=await status({env:{STRIPE_SECRET_KEY:'rk_test_status_diag',SESSION_SECRET:'E'.repeat(48)}});const body=await res.json();
+  assert.equal(body.configured,true);assert.equal(body.reachable,false);assert.equal(body.key_type,'restricted_test');assert.equal(body.request_id,'req_health_123');assert.ok(!JSON.stringify(body).includes('rk_test_status_diag'));
+ }finally{globalThis.fetch=old}
+});

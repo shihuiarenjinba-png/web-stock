@@ -5,14 +5,19 @@ export function json(body,status=200,headers={}) {const h=new Headers({'Content-
 // Production/livemode keys (sk_live_ / rk_live_) are explicitly rejected.
 // Restricted rk_test_ keys require narrowly-scoped Stripe API permissions at Stripe.
 export const TEST_MONTHLY_JPY = 100;
-export function configurationMissing(env){
- const missing=[];
- if(typeof env?.STRIPE_SECRET_KEY!=='string'||!(env.STRIPE_SECRET_KEY.startsWith('sk_test_')||env.STRIPE_SECRET_KEY.startsWith('rk_test_')))missing.push('STRIPE_SECRET_KEY');
- if(typeof env?.SESSION_SECRET!=='string'||env.SESSION_SECRET.length<32)missing.push('SESSION_SECRET');
- if(env?.STRIPE_PRO_PRICE_ID && !/^price_[A-Za-z0-9]+$/.test(env.STRIPE_PRO_PRICE_ID))missing.push('STRIPE_PRO_PRICE_ID');
- if(env?.APP_ORIGIN){try{const u=new URL(env.APP_ORIGIN);if(u.origin!==env.APP_ORIGIN||!(u.protocol==='https:'||(u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname))))missing.push('APP_ORIGIN');}catch{missing.push('APP_ORIGIN')}}
- return missing;
+export function configurationDiagnostics(env){
+ const issues=[];
+ const stripeKey=env?.STRIPE_SECRET_KEY;
+ if(typeof stripeKey!=='string'||stripeKey.length===0)issues.push({name:'STRIPE_SECRET_KEY',reason:'missing'});
+ else if(!(stripeKey.startsWith('sk_test_')||stripeKey.startsWith('rk_test_')))issues.push({name:'STRIPE_SECRET_KEY',reason:'test_key_format'});
+ const sessionSecret=env?.SESSION_SECRET;
+ if(typeof sessionSecret!=='string'||sessionSecret.length===0)issues.push({name:'SESSION_SECRET',reason:'missing'});
+ else if(sessionSecret.length<32)issues.push({name:'SESSION_SECRET',reason:'too_short'});
+ if(env?.STRIPE_PRO_PRICE_ID && !/^price_[A-Za-z0-9]+$/.test(env.STRIPE_PRO_PRICE_ID))issues.push({name:'STRIPE_PRO_PRICE_ID',reason:'invalid_format'});
+ if(env?.APP_ORIGIN){try{const u=new URL(env.APP_ORIGIN);if(u.origin!==env.APP_ORIGIN||!(u.protocol==='https:'||(u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname))))issues.push({name:'APP_ORIGIN',reason:'invalid_origin'});}catch{issues.push({name:'APP_ORIGIN',reason:'invalid_origin'})}}
+ return issues;
 }
+export function configurationMissing(env){return [...new Set(configurationDiagnostics(env).map(x=>x.name))]}
 export function isConfigured(env){return configurationMissing(env).length===0}
 export function origin(env,request){
  if(env?.APP_ORIGIN)return new URL(env.APP_ORIGIN).origin;

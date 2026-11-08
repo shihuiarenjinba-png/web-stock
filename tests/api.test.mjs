@@ -116,3 +116,21 @@ test('stripe-status safely reports restricted-key permission failure',async()=>{
   assert.equal(body.configured,true);assert.equal(body.reachable,false);assert.equal(body.key_type,'restricted_test');assert.equal(body.request_id,'req_health_123');assert.ok(!JSON.stringify(body).includes('rk_test_status_diag'));
  }finally{globalThis.fetch=old}
 });
+
+
+test('configuration trims pasted whitespace but rejects assignment-style values',async()=>{
+ const {configurationDiagnostics,isConfigured}=await import('../server/stripe.js');
+ const good={STRIPE_SECRET_KEY:'  rk_test_trimmed_123  ',SESSION_SECRET:'  '+'S'.repeat(40)+'  '};
+ assert.equal(isConfigured(good),true);
+ assert.equal(configurationDiagnostics(good).stripe_key_kind,'restricted_test');
+ const bad={STRIPE_SECRET_KEY:'STRIPE_SECRET_KEY=rk_test_badpaste',SESSION_SECRET:'S'.repeat(40)};
+ assert.equal(isConfigured(bad),false);
+ assert.equal(configurationDiagnostics(bad).stripe_key_kind,'looks_like_assignment');
+});
+test('configuration diagnostics expose only safe buckets, never secret contents',async()=>{
+ const {configurationDiagnostics}=await import('../server/stripe.js');
+ const key='rk_test_super_secret_value_abcdef';
+ const d=configurationDiagnostics({STRIPE_SECRET_KEY:key,SESSION_SECRET:'short'});
+ assert.equal(d.stripe_key_kind,'restricted_test');assert.equal(d.session_secret_length_bucket,'1-15');
+ assert.ok(!JSON.stringify(d).includes(key));assert.ok(!JSON.stringify(d).includes('short'));
+});

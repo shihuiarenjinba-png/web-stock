@@ -1,5 +1,7 @@
 # NEVER commit actual API keys. Copy to .dev.vars and fill locally.
-STRIPE_SECRET_KEY=sk_test_REPLACE_ME
+# Accepts a TEST secret key (sk_test_...) or a permission-scoped TEST restricted key (rk_test_...).
+# NEVER use sk_live_ or rk_live_ here.
+STRIPE_SECRET_KEY=rk_test_REPLACE_ME
 # Optional for an existing dedicated test price. Leave unset for JPY 100/month inline Checkout.
 # STRIPE_PRO_PRICE_ID=price_TEST_PRICE_ID
 SESSION_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_CHARACTERS

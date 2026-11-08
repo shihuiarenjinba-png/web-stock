@@ -41,7 +41,7 @@ https://web-stock-78r.pages.dev/api/stripe-webhook
 - customer.subscription.updated
 - customer.subscription.deleted
 
-Webhook Signing Secret whsec_... をCloudflare Production Secret STRIPE_WEBHOOK_SECRET に登録。
+Stripe TEST Webhook endpoint は作成済み: we_1UZXulBGa8rL8jwIJQf0McF8\n\nWebhook Signing Secret whsec_... をCloudflare Production Secret STRIPE_WEBHOOK_SECRET に登録。Secret値はGitHub・チャットへ保存しない。
 
 ### 3. 購入者本人認証
 

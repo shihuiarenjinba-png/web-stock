@@ -5,10 +5,32 @@ export function json(body,status=200,headers={}) {const h=new Headers({'Content-
 // Production/livemode keys (sk_live_ / rk_live_) are explicitly rejected.
 // Restricted rk_test_ keys require narrowly-scoped Stripe API permissions at Stripe.
 export const TEST_MONTHLY_JPY = 100;
+function normalizedText(value){return typeof value==='string'?value.trim():''}
+export function stripeKey(env){return normalizedText(env?.STRIPE_SECRET_KEY)}
+export function sessionSecret(env){return normalizedText(env?.SESSION_SECRET)}
+export function configurationDiagnostics(env){
+ const key=stripeKey(env), session=sessionSecret(env);
+ let key_kind='missing';
+ if(key.startsWith('sk_test_'))key_kind='secret_test';
+ else if(key.startsWith('rk_test_'))key_kind='restricted_test';
+ else if(key.startsWith('sk_live_'))key_kind='secret_live';
+ else if(key.startsWith('rk_live_'))key_kind='restricted_live';
+ else if(key.includes('STRIPE_SECRET_KEY='))key_kind='looks_like_assignment';
+ else if(key)key_kind='unknown';
+ return {
+  stripe_key_present:!!key,
+  stripe_key_kind:key_kind,
+  stripe_key_test_compatible:key_kind==='secret_test'||key_kind==='restricted_test',
+  session_secret_present:!!session,
+  session_secret_length_ok:session.length>=32,
+  session_secret_length_bucket:session.length===0?'0':session.length<16?'1-15':session.length<32?'16-31':'32+'
+ };
+}
 export function configurationMissing(env){
  const missing=[];
- if(typeof env?.STRIPE_SECRET_KEY!=='string'||!(env.STRIPE_SECRET_KEY.startsWith('sk_test_')||env.STRIPE_SECRET_KEY.startsWith('rk_test_')))missing.push('STRIPE_SECRET_KEY');
- if(typeof env?.SESSION_SECRET!=='string'||env.SESSION_SECRET.length<32)missing.push('SESSION_SECRET');
+ const key=stripeKey(env), session=sessionSecret(env);
+ if(!(key.startsWith('sk_test_')||key.startsWith('rk_test_')))missing.push('STRIPE_SECRET_KEY');
+ if(session.length<32)missing.push('SESSION_SECRET');
  if(env?.STRIPE_PRO_PRICE_ID && !/^price_[A-Za-z0-9]+$/.test(env.STRIPE_PRO_PRICE_ID))missing.push('STRIPE_PRO_PRICE_ID');
  if(env?.APP_ORIGIN){try{const u=new URL(env.APP_ORIGIN);if(u.origin!==env.APP_ORIGIN||!(u.protocol==='https:'||(u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname))))missing.push('APP_ORIGIN');}catch{missing.push('APP_ORIGIN')}}
  return missing;
@@ -27,7 +49,7 @@ export class StripeApiError extends Error {
 }
 export async function stripe(env,path,form){
  if(!isConfigured(env))throw new Error('Stripe test configuration is not complete');
- const opts={method:form?'POST':'GET',headers:{'Authorization':`Bearer ${env.STRIPE_SECRET_KEY}`,'Stripe-Version':'2025-09-30.clover'}};
+ const opts={method:form?'POST':'GET',headers:{'Authorization':`Bearer ${stripeKey(env)}`,'Stripe-Version':'2025-09-30.clover'}};
  if(form){opts.headers['Content-Type']='application/x-www-form-urlencoded';opts.body=new URLSearchParams(form)}
  const res=await fetch(`https://api.stripe.com/v1${path}`,opts);
  let data={};try{data=await res.json()}catch{}
@@ -46,19 +68,19 @@ export function safeEqual(a,b){if(a.length!==b.length)return false;let diff=0;fo
 export async function checkoutBrowserState(env, secure=true){
  const bytes=crypto.getRandomValues(new Uint8Array(32));
  const token=b64url(bytes);
- const reference=await signature(`checkout:${token}`,env.SESSION_SECRET);
+ const reference=await signature(`checkout:${token}`,sessionSecret(env));
  const cookie=`demand_checkout=${token}; Path=/; Max-Age=7200; HttpOnly; SameSite=Lax${secure?'; Secure':''}`;
  return {reference,cookie};
 }
 export async function validCheckoutBrowser(request,env,session){
  const raw=request.headers.get('Cookie')?.match(/(?:^|;\s*)demand_checkout=([A-Za-z0-9_-]{40,60})/)?.[1];
  if(!raw||typeof session?.client_reference_id!=='string')return false;
- const reference=await signature(`checkout:${raw}`,env.SESSION_SECRET);
+ const reference=await signature(`checkout:${raw}`,sessionSecret(env));
  return safeEqual(reference,session.client_reference_id);
 }
-export async function issueCookie(subscription,customer,env,secure=true){const payload=b64url(enc.encode(JSON.stringify({v:1,sub:subscription,customer,exp:Math.floor(Date.now()/1000)+14*86400})));const sig=await signature(payload,env.SESSION_SECRET);return `demand_pro=${payload}.${sig}; Path=/; Max-Age=${14*86400}; HttpOnly; SameSite=Lax${secure?'; Secure':''}`}
+export async function issueCookie(subscription,customer,env,secure=true){const payload=b64url(enc.encode(JSON.stringify({v:1,sub:subscription,customer,exp:Math.floor(Date.now()/1000)+14*86400})));const sig=await signature(payload,sessionSecret(env));return `demand_pro=${payload}.${sig}; Path=/; Max-Age=${14*86400}; HttpOnly; SameSite=Lax${secure?'; Secure':''}`}
 export function clearCookie(secure=true){return `demand_pro=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure?'; Secure':''}`}
-async function readCookie(request,env){const m=request.headers.get('Cookie')?.match(/(?:^|;\s*)demand_pro=([^;]+)/);if(!m)return null;const [payload,sig]=m[1].split('.');if(!payload||!sig||payload.length>1024)return null;const target=await signature(payload,env.SESSION_SECRET);if(!safeEqual(target,sig))return null;try{const data=JSON.parse(new TextDecoder().decode(unb64url(payload)));if(data.v!==1||data.exp<=Date.now()/1000||!/^sub_[A-Za-z0-9]+$/.test(data.sub)||!/^cus_[A-Za-z0-9]+$/.test(data.customer))return null;return data}catch{return null}}
+async function readCookie(request,env){const m=request.headers.get('Cookie')?.match(/(?:^|;\s*)demand_pro=([^;]+)/);if(!m)return null;const [payload,sig]=m[1].split('.');if(!payload||!sig||payload.length>1024)return null;const target=await signature(payload,sessionSecret(env));if(!safeEqual(target,sig))return null;try{const data=JSON.parse(new TextDecoder().decode(unb64url(payload)));if(data.v!==1||data.exp<=Date.now()/1000||!/^sub_[A-Za-z0-9]+$/.test(data.sub)||!/^cus_[A-Za-z0-9]+$/.test(data.customer))return null;return data}catch{return null}}
 export async function verifiedSubscription(env,id,customer=null){
  if(!/^sub_[A-Za-z0-9]+$/.test(id))return null;
  const data=await stripe(env,`/subscriptions/${encodeURIComponent(id)}`);

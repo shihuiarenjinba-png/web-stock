@@ -145,3 +145,5 @@ npx wrangler pages dev public --port 8788
 - **Cloudflare必須設定**：Pages > `web-stock` > Settings > Variables and Secrets で、Production環境の`STRIPE_SECRET_KEY`（`sk_test_`で始まる）と`SESSION_SECRET`（暗号学的乱数32字以上）を**Encrypt**で登録。設定後に再デプロイ。秘密鍵をGitやチャットに貼らない。Stripe MCPの接続だけではCloudflareのSecretは作成されない。
 - **検証**：`/api/entitlement`で`configured:true`が返った後、`/pro/`でStripe Checkoutのテストカード決済と戻り先、契約認証まで実地確認する。Cloudflare実環境での完走まで`SALE_READY`としない。
 - **商用化注意**：無料画面からの非表示は機能境界・導線設計であり、クライアントJSのコピー防止にはならない。認証・契約管理・課金状態の恒久的検証は販売前に別途完成させる必要がある。
+
+<!-- Cloudflare Pages redeploy marker: 2026-11-08T14:39Z; no secrets included. -->

@@ -17,6 +17,7 @@ async function checkStripeHealth(){
   const el=$('stripeHealth');
   if(!stripeHealth.configured){
    const labels=(stripeHealth.issues||[]).map(i=>{
+    if(i.name==='STRIPE_SECRET_KEY'&&i.reason==='pasted_assignment')return lang()==='en'?'Paste only the key value, not STRIPE_SECRET_KEY=...':'値には STRIPE_SECRET_KEY= を付けず、キー本体だけを貼り付けてください';
     if(i.name==='STRIPE_SECRET_KEY'&&i.reason==='test_key_format')return lang()==='en'?'Stripe key is not sk_test_ / rk_test_':'Stripeキーが sk_test_ / rk_test_ 形式ではありません';
     if(i.name==='STRIPE_SECRET_KEY')return lang()==='en'?'Stripe key is missing':'STRIPE_SECRET_KEYが未登録です';
     if(i.name==='SESSION_SECRET'&&i.reason==='too_short')return lang()==='en'?'SESSION_SECRET is shorter than 32 characters':'SESSION_SECRETが32文字未満です';

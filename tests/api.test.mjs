@@ -125,3 +125,20 @@ test('configuration diagnostics distinguish missing, short session and wrong Str
  assert.ok(configurationDiagnostics({STRIPE_SECRET_KEY:'rk_live_not_allowed',SESSION_SECRET:'X'.repeat(40)}).some(x=>x.name==='STRIPE_SECRET_KEY'&&x.reason==='test_key_format'));
  assert.equal(configurationDiagnostics({STRIPE_SECRET_KEY:'rk_test_ok',SESSION_SECRET:'X'.repeat(40)}).length,0);
 });
+
+
+test('Stripe secret values tolerate surrounding whitespace but not assignment-style paste',async()=>{
+ const {configurationDiagnostics,isConfigured}=await import('../server/stripe.js');
+ assert.equal(isConfigured({STRIPE_SECRET_KEY:'  rk_test_ok_123  ',SESSION_SECRET:'  '+'S'.repeat(40)+'  '}),true);
+ const issues=configurationDiagnostics({STRIPE_SECRET_KEY:'STRIPE_SECRET_KEY=rk_test_bad',SESSION_SECRET:'S'.repeat(40)});
+ assert.ok(issues.some(x=>x.name==='STRIPE_SECRET_KEY'&&x.reason==='pasted_assignment'));
+});
+test('Stripe Authorization uses normalized secret value',async()=>{
+ const old=globalThis.fetch;let auth='';
+ try{
+  globalThis.fetch=async(_url,opt)=>{auth=opt.headers.Authorization;return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};
+  const trimmed={STRIPE_SECRET_KEY:'  rk_test_trimmed_123  ',SESSION_SECRET:'  '+'T'.repeat(40)+'  '};
+  const res=await checkout({request:request('/api/checkout',undefined,{}),env:trimmed});
+  assert.equal(res.status,200);assert.equal(auth,'Bearer rk_test_trimmed_123');
+ }finally{globalThis.fetch=old}
+});

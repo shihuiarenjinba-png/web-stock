@@ -22,7 +22,21 @@ export function origin(env,request){
  return value.origin;
 }
 export function validOrigin(request,env){try{const h=request.headers.get('Origin');return h===origin(env,request)}catch{return false}}
-export async function stripe(env,path,form){if(!isConfigured(env))throw new Error('Stripe test configuration is not complete');const opts={method:form?'POST':'GET',headers:{'Authorization':`Bearer ${env.STRIPE_SECRET_KEY}`,'Stripe-Version':'2025-09-30.clover'}};if(form){opts.headers['Content-Type']='application/x-www-form-urlencoded';opts.body=new URLSearchParams(form)}const res=await fetch(`https://api.stripe.com/v1${path}`,opts);const data=await res.json();if(!res.ok)throw new Error(data.error?.message||'Stripe API error');return data}
+export class StripeApiError extends Error {
+ constructor(message,{status=502,type=null,code=null,requestId=null,param=null}={}){super(message);this.name='StripeApiError';this.status=status;this.type=type;this.code=code;this.requestId=requestId;this.param=param}
+}
+export async function stripe(env,path,form){
+ if(!isConfigured(env))throw new Error('Stripe test configuration is not complete');
+ const opts={method:form?'POST':'GET',headers:{'Authorization':`Bearer ${env.STRIPE_SECRET_KEY}`,'Stripe-Version':'2025-09-30.clover'}};
+ if(form){opts.headers['Content-Type']='application/x-www-form-urlencoded';opts.body=new URLSearchParams(form)}
+ const res=await fetch(`https://api.stripe.com/v1${path}`,opts);
+ let data={};try{data=await res.json()}catch{}
+ if(!res.ok){
+  const e=data.error||{};
+  throw new StripeApiError(e.message||'Stripe API error',{status:res.status,type:e.type||null,code:e.code||null,requestId:res.headers.get('request-id')||res.headers.get('Request-Id')||null,param:e.param||null});
+ }
+ return data
+}
 const b64url=bytes=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const unb64url=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)),c=>c.charCodeAt(0));
 async function signature(content,secret){const key=await crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return b64url(new Uint8Array(await crypto.subtle.sign('HMAC',key,enc.encode(content))))}

@@ -4,20 +4,35 @@ import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './imp
 import {initI18n,lang,t,errorMessage} from './i18n.js';
 import {printRiskReport} from './pdf-report.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
-let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null;
+let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null;
 const KEY='demandscope_pro_skus_v1';
 function warn(msg){$('proAlert').textContent=errorMessage(msg instanceof Error?msg:new Error(msg));$('proAlert').classList.remove('hidden')}
 function clearWarn(){$('proAlert').classList.add('hidden')}
 function toast(v){$('toast').textContent=v;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),2600)}
-async function call(path,body){const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body??{})});const data=await res.json();if(!res.ok)throw new Error(data.error||'通信に失敗しました');return data}
-async function boot(){try{const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(lang()==='en'?'Test checkout verified':'テスト決済を確認しました');}
+async function call(path,body){const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body??{})});let data={};try{data=await res.json()}catch{}if(!res.ok){const parts=[data.error,data.detail,data.hint,data.request_id?('Request ID: '+data.request_id):null].filter(Boolean);throw new Error(parts.join(' / ')||'通信に失敗しました')}return data}
+async function checkStripeHealth(){
+ try{
+  const res=await fetch('/api/stripe-status',{cache:'no-store'});
+  stripeHealth=await res.json();
+  const el=$('stripeHealth');
+  if(!stripeHealth.configured){el.textContent=lang()==='en'?'Stripe secrets are not configured.':'Stripe Secretが未設定です。';el.className='stripe-health bad';return}
+  if(stripeHealth.reachable){el.textContent=lang()==='en'?'✓ Stripe API reachable ('+stripeHealth.key_type+')':'✓ Stripe API接続済み（'+stripeHealth.key_type+'）';el.className='stripe-health good';return}
+  el.textContent=(lang()==='en'?'Stripe API unreachable: ':'Stripe API未接続: ')+(stripeHealth.detail||stripeHealth.hint||'unknown error');
+  el.className='stripe-health bad';
+ }catch(e){const el=$('stripeHealth');el.textContent=lang()==='en'?'Stripe connection check failed.':'Stripe接続確認に失敗しました。';el.className='stripe-health bad'}
+}
+async function boot(){try{await checkStripeHealth();const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(lang()==='en'?'Test checkout verified':'テスト決済を確認しました');}
  if(params.get('checkout')==='cancelled'){history.replaceState({},'',location.pathname);warn('決済はキャンセルされました。');}
  const res=await fetch('/api/entitlement',{cache:'no-store'});
  if(!res.ok){access(false,true);warn(lang()==='en'?'Pro requires deployment of Cloudflare Pages Functions and Stripe test configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripeテスト設定のデプロイが必要です。');return;}
  const state=await res.json();access(!!state.active,state.configured===false);if(state.configured===false&&state.missing?.length)warn((lang()==='en'?'Setup needed: ':'設定が必要です: ')+state.missing.join(', '));if(state.error)warn(state.error);
  }catch(e){access(false,false);warn(e.message)} }
 function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました'):t('🔒 Stripe テスト決済で利用開始');$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。');$('checkout').disabled=unconfigured;if(unconfigured)$('accessText').textContent=lang()==='en'?'Configure the Stripe TEST secret key and session secret on Cloudflare Pages.':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。';if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
-$('checkout').addEventListener('click',async()=>{clearWarn();$('checkout').disabled=true;try{const x=await call('/api/checkout');location.assign(x.url)}catch(e){warn(e.message);$('checkout').disabled=false}});
+$('checkout').addEventListener('click',async()=>{
+ clearWarn();$('checkoutError').classList.add('hidden');const button=$('checkout');const original=button.textContent;button.disabled=true;button.textContent=lang()==='en'?'Connecting to Stripe…':'Stripeに接続中…';
+ try{const x=await call('/api/checkout');if(!x.url)throw new Error(lang()==='en'?'Checkout URL was not returned.':'決済URLが返されませんでした。');location.assign(x.url)}
+ catch(e){const message=e.message||String(e);warn(message);$('checkoutError').textContent=message;$('checkoutError').classList.remove('hidden');await checkStripeHealth();button.disabled=false;button.textContent=original}
+});
 $('portal').addEventListener('click',async()=>{try{const x=await call('/api/portal');location.assign(x.url)}catch(e){warn(e.message)}});
 $('logout').addEventListener('click',async()=>{try{await call('/api/logout');access(false,false);toast('サインアウトしました')}catch(e){warn(e.message)}});
 $('addToggle').addEventListener('click',()=>showEditor());$('cancelEdit').addEventListener('click',()=>{$('skuForm').classList.add('hidden');editing=null});

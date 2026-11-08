@@ -1,4 +1,4 @@
-import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY} from '../../server/stripe.js';
+import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError} from '../../server/stripe.js';
 export async function onRequestPost({request,env}){
  if(!isConfigured(env))return json({error:'Stripeテスト接続が未設定です。管理者の設定後に利用できます。'},503);
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
@@ -16,5 +16,16 @@ export async function onRequestPost({request,env}){
  });
  if(!session.url?.startsWith('https://checkout.stripe.com/'))return json({error:'決済画面のURLを取得できませんでした。'},502);
  return json({url:session.url},200,{'Set-Cookie':state.cookie});
- }catch(e){return json({error:'Stripe Checkoutを開始できません。設定・Stripeアカウント権限・APIキーを確認してください。'},502)}
+ }catch(e){
+  if(e instanceof StripeApiError)return json({
+    error:'Stripe Checkoutを開始できません。',
+    detail:e.message,
+    stripe_type:e.type,
+    stripe_code:e.code,
+    stripe_param:e.param,
+    request_id:e.requestId,
+    hint:e.status===403?'制限付きAPIキーのCheckout Sessions権限を確認してください。':e.status===401?'Stripe APIキーが有効なテストキーか確認してください。':'Stripeのテスト設定と権限を確認してください。'
+  },502);
+  return json({error:'Stripe Checkoutを開始できません。',detail:'Cloudflare側の処理でエラーが発生しました。'},502)
+ }
 }

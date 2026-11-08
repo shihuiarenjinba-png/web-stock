@@ -147,3 +147,19 @@ npx wrangler pages dev public --port 8788
 - **商用化注意**：無料画面からの非表示は機能境界・導線設計であり、クライアントJSのコピー防止にはならない。認証・契約管理・課金状態の恒久的検証は販売前に別途完成させる必要がある。
 
 <!-- Cloudflare Pages redeploy marker: 2026-11-08T14:39Z; no secrets included. -->
+
+
+## 商用SaaS基盤 — 2026-11-08
+
+添付のNamiData再利用設計を基準に、DemandScopeを「据え置き型の月額SaaS」へ移行するための土台を追加。
+
+- 法務: /legal/terms/, /legal/privacy/, /legal/commerce/, /legal/billing/
+- SEO: robots.txt / sitemap.xml / Public canonical / Pro noindex
+- 申込表示: テスト価格、月額、自動更新、解約導線、規約リンクをCheckoutボタン前に表示
+- D1: members / subscriptions / stripe_events / legal_acceptances の初期マイグレーション
+- Stripe Webhook: 署名検証後、D1にイベントを冪等保存しsubscription状態を同期
+- DB未接続時はWebhookを503で拒否し、Stripeのretryを失わない
+- /api/commercial-readiness で、D1・Webhook・認証・法務情報の準備状況を秘密値なしで確認可能
+- Live billingは引き続き無効。Google OIDC + member/Stripe Customer紐付け、事業者情報、最終価格・税設定、実E2E完了後に別ゲートで解禁する
+
+手動設定残件は docs/COMMERCIAL_LAUNCH_CHECKLIST_ja.md を参照。

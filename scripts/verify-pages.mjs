@@ -7,6 +7,12 @@ const required = [
   'public/index.html',
   'public/pro/index.html',
   'public/_headers',
+  'public/robots.txt',
+  'public/sitemap.xml',
+  'public/legal/terms/index.html',
+  'public/legal/privacy/index.html',
+  'public/legal/commerce/index.html',
+  'public/legal/billing/index.html',
   'public/assets/app.js',
   'public/assets/pro.js',
   'public/assets/logic.js',
@@ -16,12 +22,15 @@ const required = [
   'public/assets/style.css',
   'public/assets/jszip.min.js',
   'server/stripe.js',
+  'server/subscription-store.js',
+  'migrations/0001_commercial_core.sql',
   'functions/api/checkout.js',
   'functions/api/activate.js',
   'functions/api/entitlement.js',
   'functions/api/portal.js',
   'functions/api/logout.js',
   'functions/api/stripe-webhook.js',
+  'functions/api/commercial-readiness.js',
 ];
 for (const path of required) {
   const full = resolve(root, path);
@@ -29,7 +38,7 @@ for (const path of required) {
     throw new Error(`Missing or empty Pages asset/Function: ${path}`);
   }
 }
-for (const file of ['public/index.html', 'public/pro/index.html']) {
+for (const file of ['public/index.html', 'public/pro/index.html', 'public/legal/terms/index.html', 'public/legal/privacy/index.html', 'public/legal/commerce/index.html', 'public/legal/billing/index.html']) {
   const html = readFileSync(resolve(root, file), 'utf8');
   // Check only local root-relative linked JS/CSS assets; ignore external URLs.
   for (const [, path] of html.matchAll(/(?:src|href)=["'](\/assets\/[^"'?#]+)["']/g)) {
@@ -43,3 +52,9 @@ if (existsSync(resolve(root, 'wrangler.toml')) || existsSync(resolve(root, 'wran
   throw new Error('This repository uses Pages Git integration; do not add a Worker deploy config accidentally.');
 }
 console.log('PASS Cloudflare Pages layout (public/ + functions/). No Worker deployment configuration.');
+
+const proHtml = readFileSync(resolve(root, 'public/pro/index.html'), 'utf8');
+if (!/noindex,nofollow/.test(proHtml)) throw new Error('Pro surface must remain noindex,nofollow.');
+if (!/自動更新/.test(proHtml)) throw new Error('Pro checkout surface must disclose recurring billing.');
+const commerceHtml = readFileSync(resolve(root, 'public/legal/commerce/index.html'), 'utf8');
+if (!/本番販売開始前に掲載/.test(commerceHtml)) throw new Error('Test-stage commerce disclosure must not pretend live operator details are complete.');

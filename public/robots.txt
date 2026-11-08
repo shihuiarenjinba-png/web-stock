@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /pro/
+Disallow: /api/
+
+Sitemap: https://web-stock-78r.pages.dev/sitemap.xml

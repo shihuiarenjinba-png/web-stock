@@ -116,3 +116,12 @@ test('stripe-status safely reports restricted-key permission failure',async()=>{
   assert.equal(body.configured,true);assert.equal(body.reachable,false);assert.equal(body.key_type,'restricted_test');assert.equal(body.request_id,'req_health_123');assert.ok(!JSON.stringify(body).includes('rk_test_status_diag'));
  }finally{globalThis.fetch=old}
 });
+
+
+test('configuration diagnostics distinguish missing, short session and wrong Stripe key format',async()=>{
+ const {configurationDiagnostics}=await import('../server/stripe.js');
+ assert.deepEqual(configurationDiagnostics({}).map(x=>[x.name,x.reason]),[['STRIPE_SECRET_KEY','missing'],['SESSION_SECRET','missing']]);
+ assert.ok(configurationDiagnostics({STRIPE_SECRET_KEY:'rk_test_ok',SESSION_SECRET:'short'}).some(x=>x.name==='SESSION_SECRET'&&x.reason==='too_short'));
+ assert.ok(configurationDiagnostics({STRIPE_SECRET_KEY:'rk_live_not_allowed',SESSION_SECRET:'X'.repeat(40)}).some(x=>x.name==='STRIPE_SECRET_KEY'&&x.reason==='test_key_format'));
+ assert.equal(configurationDiagnostics({STRIPE_SECRET_KEY:'rk_test_ok',SESSION_SECRET:'X'.repeat(40)}).length,0);
+});

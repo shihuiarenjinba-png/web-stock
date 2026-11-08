@@ -8,3 +8,27 @@ export function drawHistogram(canvas,r,locale='ja'){const ctx=canvas.getContext(
  const mark=(value,color,label)=>{let x=left+(value-min)/(max-min)*pad;ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,bottom);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=color;ctx.textAlign=x>right-45?'right':'left';ctx.fillText(label,x+(x>right-45?-3:4),top-5)};
  mark(r.reorderPoint,'#f2bd78',locale==='en'?'ROP':'発注点');if(r.inventory!==null)mark(r.inventory,'#8caeff',locale==='en'?'Stock':'在庫');ctx.fillStyle='#849bb4';ctx.textAlign='center';ctx.font='10px system-ui';for(let i=0;i<=4;i++){let x=left+(i/4)*pad;ctx.fillText(formatNumber(min+(i/4)*(max-min),0),x,bottom+18)}
 }
+
+
+export function drawSimulationDots(canvas,r,locale='ja'){
+ const ctx=canvas.getContext('2d');if(!ctx)return;
+ const ratio=Math.min(window.devicePixelRatio||1,2),w=canvas.clientWidth||550,h=canvas.clientHeight||165;
+ canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);
+ const left=38,right=w-12,top=18,bottom=h-30,pad=right-left;
+ const vals=r.sums,min=Math.max(0,Math.min(vals[0],r.inventory??vals[0],r.reorderPoint)*.96),max=Math.max(vals.at(-1),r.inventory??0,r.reorderPoint)*1.04||1;
+ ctx.strokeStyle='#2a4056';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(left,bottom);ctx.lineTo(right,bottom);ctx.stroke();
+ ctx.fillStyle='#60d9ce';ctx.globalAlpha=.28;
+ for(let i=0;i<vals.length;i++){
+   const v=vals[i],x=left+(v-min)/(max-min)*pad;
+   const hash=(Math.imul(i+1,2654435761)>>>0)/4294967295;
+   const y=top+hash*Math.max(1,bottom-top-7);
+   ctx.beginPath();ctx.arc(x,y,1.25,0,Math.PI*2);ctx.fill();
+ }
+ ctx.globalAlpha=1;
+ const mark=(value,color,label,dashed=true)=>{let x=left+(value-min)/(max-min)*pad;ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.setLineDash(dashed?[4,4]:[]);ctx.beginPath();ctx.moveTo(x,top-2);ctx.lineTo(x,bottom);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=color;ctx.font='10px system-ui';ctx.textAlign=x>right-52?'right':'left';ctx.fillText(label,x+(x>right-52?-3:4),top-6)};
+ mark(r.median,'#a8b6c8',locale==='en'?'Median':'中央値',false);
+ mark(r.reorderPoint,'#f2bd78',locale==='en'?'ROP':'発注点');
+ if(r.inventory!==null)mark(r.inventory,'#8caeff',locale==='en'?'Stock':'在庫');
+ ctx.fillStyle='#849bb4';ctx.textAlign='center';ctx.font='10px system-ui';
+ for(let i=0;i<=4;i++){let x=left+(i/4)*pad;ctx.fillText(formatNumber(min+(i/4)*(max-min),0),x,bottom+18)}
+}

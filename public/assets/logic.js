@@ -20,6 +20,29 @@ function sampleSd(values) {
   const m = average(values);
   return Math.sqrt(values.reduce((a,v)=>a+(v-m)**2,0)/(values.length-1));
 }
+function exponentiallyWeightedSd(values, halfLife=7) {
+  if (values.length < 2) return 0;
+  const decay=Math.exp(Math.log(.5)/Math.max(1,halfLife));
+  let sumW=0,sumW2=0,mean=0;
+  for(let i=0;i<values.length;i++){const w=decay**(values.length-1-i);sumW+=w;sumW2+=w*w;mean+=w*values[i];}
+  mean/=sumW;
+  let variance=0;
+  for(let i=0;i<values.length;i++){const w=decay**(values.length-1-i);variance+=w*(values[i]-mean)**2;}
+  variance/=sumW;
+  const effectiveN=(sumW*sumW)/sumW2;
+  if(effectiveN>1)variance*=effectiveN/(effectiveN-1);
+  return Math.sqrt(Math.max(0,variance));
+}
+function conservativeVolatility(residuals, leadTime, window) {
+  const sigmaLong=sampleSd(residuals);
+  const recentWindow=Math.min(residuals.length,Math.max(10,Math.min(28,Math.max(leadTime*2,window*2))));
+  const sigmaRecent=sampleSd(residuals.slice(-recentWindow));
+  const ewmaHalfLife=Math.max(3,Math.min(14,leadTime));
+  const sigmaEwma=exponentiallyWeightedSd(residuals,ewmaHalfLife);
+  const parts=[['long',sigmaLong],['recent',sigmaRecent],['ewma',sigmaEwma]];
+  const [volatilityDriver,sigma]=parts.reduce((best,item)=>item[1]>best[1]?item:best,parts[0]);
+  return {sigma,sigmaLong,sigmaRecent,sigmaEwma,recentWindow,ewmaHalfLife,volatilityDriver};
+}
 function quantile(sorted, p) {
   const index=(sorted.length-1)*p, lo=Math.floor(index), hi=Math.ceil(index);
   return sorted[lo]+(sorted[hi]-sorted[lo])*(index-lo);
@@ -58,7 +81,10 @@ export function analyze({ demand, leadTime=7, service=95, method='sma', window=7
     futureBaseline=average(demand.slice(-window));
   }
   const residualMean=average(residuals);
-  const sigma=sampleSd(residuals);
+  // Conservative short-horizon volatility: do not let calmer old observations
+  // dilute a recent jump in demand uncertainty.
+  const volatility=conservativeVolatility(residuals,leadTime,window);
+  const {sigma,sigmaLong,sigmaRecent,sigmaEwma,recentWindow,ewmaHalfLife,volatilityDriver}=volatility;
   const lastResidual=demand[n-1] - (baselines[n-1]??historicalMean);
   const lastZ=sigma>0?lastResidual/sigma:null;
   const random=rng(sampleSeed(demand,leadTime,service,method,window));
@@ -82,8 +108,10 @@ export function analyze({ demand, leadTime=7, service=95, method='sma', window=7
   if(n<30) flags.push('履歴が30期未満です。分布推定の不確実性が高くなります。');
   if(method==='sma'&&residuals.length<15) flags.push('移動平均の残差が15個未満です。標準偏差が不安定になりやすいです。');
   if(sigma===0) flags.push('残差のばらつきが0です。モデル上の需要リスクを過小評価する可能性があります。');
+  if(sigmaRecent>sigmaLong*1.25 && sigmaRecent>0) flags.push('直近の残差ボラティリティが長期水準を25%以上上回っています。短期リスクを優先して推定しています。');
+  if(sigmaEwma>sigmaLong*1.25 && sigmaEwma>0) flags.push('最近の観測を重くしたボラティリティが長期水準を25%以上上回っています。');
   if(demand.some(v=>v===0)&&demand.some(v=>v>0)) flags.push('需要0の日があります。正規分布モデルが実際の需要分布に合わない場合があります。');
-  return {runs,n,method,window,leadTime,service,historicalMean,baselines,residuals,residualMean,sigma,futureBaseline,lastResidual,lastZ,mean,sd,median:quantile(sums,.5),p90,p95,p99,target,baseStock,safetyStock,reorderPoint,stockout,stockZ,inventory,flags,sums,demand};
+  return {runs,n,method,window,leadTime,service,historicalMean,baselines,residuals,residualMean,sigma,sigmaLong,sigmaRecent,sigmaEwma,recentWindow,ewmaHalfLife,volatilityDriver,futureBaseline,lastResidual,lastZ,mean,sd,median:quantile(sums,.5),p90,p95,p99,target,baseStock,safetyStock,reorderPoint,stockout,stockZ,inventory,flags,sums,demand};
 }
 export function formatNumber(n, digits=1, locale='ja') { return n===null||!Number.isFinite(n)?'—':n.toLocaleString(locale==='en'?'en-US':'ja-JP',{maximumFractionDigits:digits}); }
 export function riskLabel(z,locale='ja'){if(z===null)return locale==='en'?'Unavailable':'比較不可';const a=Math.abs(z);if(locale==='en')return a<1?'Typical':a<2?'Moderate deviation':a<3?'Large deviation':'Extreme deviation';return a<1?'通常範囲':a<2?'やや大きい変動':a<3?'大きい変動':'非常に大きい変動';}
@@ -93,7 +121,8 @@ export function reportText(r, sku='', locale='ja') {
  `Demand & inventory risk simulator${sku?' — '+sku:''}`,
  `Historical periods: ${r.n} / Baseline: ${r.method==='sma'?r.window+'-day simple moving average':'overall mean'}`,
  `Daily forecast baseline: ${f(r.futureBaseline)} / Historical mean: ${f(r.historicalMean)}`,
- `Residual sample SD: ${f(r.sigma)} / Residual mean: ${f(r.residualMean)}`,
+ `Conservative residual volatility: ${f(r.sigma)} / Full: ${f(r.sigmaLong)} / Recent(${r.recentWindow}): ${f(r.sigmaRecent)} / EWMA: ${f(r.sigmaEwma)}`,
+ `Residual mean: ${f(r.residualMean)} / Volatility driver: ${r.volatilityDriver}`,
  `Lead time: ${r.leadTime} days / Monte Carlo runs: ${r.runs}`,
  `Lead-time demand mean: ${f(r.mean)} / SD: ${f(r.sd)} / Median: ${f(r.median)}`,
  `P90: ${f(r.p90)} / P95: ${f(r.p95)} / P99: ${f(r.p99)}`,
@@ -106,7 +135,8 @@ export function reportText(r, sku='', locale='ja') {
  return [`需要予測・在庫リスクシミュレーター${sku?' — '+sku:''}`,
  `過去需要: ${r.n}期 / 基準: ${r.method==='sma'?r.window+'期の単純移動平均':'全体平均'}`,
  `予測基準（日次）: ${f(r.futureBaseline)} / 過去需要の平均: ${f(r.historicalMean)}`,
- `残差の標準偏差（標本）: ${f(r.sigma)} / 残差平均: ${f(r.residualMean)}`,
+ `採用ボラティリティ: ${f(r.sigma)} / 長期SD: ${f(r.sigmaLong)} / 直近${r.recentWindow}期SD: ${f(r.sigmaRecent)} / 指数加重SD: ${f(r.sigmaEwma)}`,
+ `残差平均: ${f(r.residualMean)} / 採用根拠: ${r.volatilityDriver}`,
  `リードタイム: ${r.leadTime}日 / シミュレーション: ${r.runs.toLocaleString()}回`,
  `リードタイム需要 平均: ${f(r.mean)} / 標準偏差: ${f(r.sd)} / 中央値: ${f(r.median)}`,
  `90%点: ${f(r.p90)} / 95%点: ${f(r.p95)} / 99%点: ${f(r.p99)}`,

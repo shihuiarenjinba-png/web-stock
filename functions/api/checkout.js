@@ -1,11 +1,15 @@
 import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError} from '../../server/stripe.js';
+import {LEGAL_VERSION} from '../../server/legal.js';
 export async function onRequestPost({request,env}){
  if(!isConfigured(env))return json({error:'Stripeテスト接続が未設定です。管理者の設定後に利用できます。'},503);
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
+ let input={};try{input=await request.json()}catch{}
+ if(input?.accept_terms!==true)return json({error:'利用規約・プライバシーポリシー・課金条件への同意が必要です。'},400);
  try{const site=origin(env,request);const state=await checkoutBrowserState(env,site.startsWith('https:'));const session=await stripe(env,'/checkout/sessions',{
  mode:'subscription',client_reference_id:state.reference, 'line_items[0][quantity]':'1',
  success_url:`${site}/pro/?session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${site}/pro/?checkout=cancelled`,
- 'metadata[app]':'demand-scope-pro', 'subscription_data[metadata][app]':'demand-scope-pro',
+ 'metadata[app]':'demand-scope-pro', 'metadata[legal_version]':LEGAL_VERSION, 'metadata[legal_accepted_at]':String(Math.floor(Date.now()/1000)),
+ 'subscription_data[metadata][app]':'demand-scope-pro', 'subscription_data[metadata][legal_version]':LEGAL_VERSION,
  'payment_method_types[0]':'card',
  ...(env.STRIPE_PRO_PRICE_ID?{'line_items[0][price]':env.STRIPE_PRO_PRICE_ID}:{
  'line_items[0][price_data][currency]':'jpy',

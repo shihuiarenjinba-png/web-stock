@@ -23,7 +23,9 @@ const required = [
   'public/assets/jszip.min.js',
   'server/stripe.js',
   'server/subscription-store.js',
+  'server/legal.js',
   'migrations/0001_commercial_core.sql',
+  'migrations/0002_checkout_acceptance.sql',
   'functions/api/checkout.js',
   'functions/api/activate.js',
   'functions/api/entitlement.js',
@@ -58,3 +60,5 @@ if (!/noindex,nofollow/.test(proHtml)) throw new Error('Pro surface must remain 
 if (!/自動更新/.test(proHtml)) throw new Error('Pro checkout surface must disclose recurring billing.');
 const commerceHtml = readFileSync(resolve(root, 'public/legal/commerce/index.html'), 'utf8');
 if (!/本番販売開始前に掲載/.test(commerceHtml)) throw new Error('Test-stage commerce disclosure must not pretend live operator details are complete.');
+
+if (!/id="legalConsent"/.test(proHtml)) throw new Error('Pro checkout must require explicit legal consent.');

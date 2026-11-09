@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {subscriptionMutationFromEvent} from '../server/subscription-store.js';
+import {subscriptionMutationFromEvent,checkoutAcceptanceFromEvent} from '../server/subscription-store.js';
 
 test('subscription webhook snapshot extracts durable billing state',()=>{
  const m=subscriptionMutationFromEvent({
@@ -41,4 +41,17 @@ test('commercial migration contains idempotent Stripe event and subscription tab
  assert.match(sql,/event_id TEXT PRIMARY KEY/);
  assert.match(sql,/CREATE TABLE IF NOT EXISTS subscriptions/);
  assert.match(sql,/stripe_subscription_id TEXT PRIMARY KEY/);
+});
+
+
+test('checkout completion captures legal consent evidence for D1',()=>{
+ const a=checkoutAcceptanceFromEvent({type:'checkout.session.completed',data:{object:{id:'cs_test_1',mode:'subscription',customer:'cus_1',subscription:'sub_1',livemode:false,metadata:{legal_version:'2026-11-08',legal_accepted_at:'1794190000'}}}});
+ assert.deepEqual(a,{session:'cs_test_1',customer:'cus_1',subscription:'sub_1',legalVersion:'2026-11-08',acceptedAt:1794190000,livemode:false});
+});
+test('checkout consent without legal metadata is not persisted as evidence',()=>{
+ assert.equal(checkoutAcceptanceFromEvent({type:'checkout.session.completed',data:{object:{id:'cs_test_1',mode:'subscription',customer:'cus_1',subscription:'sub_1',metadata:{}}}}),null);
+});
+test('checkout acceptance migration exists',()=>{
+ const sql=readFileSync(new URL('../migrations/0002_checkout_acceptance.sql',import.meta.url),'utf8');
+ assert.match(sql,/CREATE TABLE IF NOT EXISTS checkout_acceptances/);assert.match(sql,/legal_version TEXT NOT NULL/);
 });

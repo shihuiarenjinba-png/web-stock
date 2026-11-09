@@ -102,6 +102,8 @@ test('DemandScope uses dedicated test customer portal configuration',async()=>{
    const form=calls.find(x=>x.url.includes('/billing_portal/sessions'))?.form;
    assert.equal(form?.get('configuration'),'bpc_1UZ2FNBGa8rL8jwIBPFuUkWT');
    assert.equal(form?.get('return_url'),'http://localhost:8788/pro/');
+   assert.equal(form?.get('locale'),'ja');
+   assert.equal(form?.get('after_expiration[type]'),'customer_login');
  }finally{globalThis.fetch=old}
 });
 

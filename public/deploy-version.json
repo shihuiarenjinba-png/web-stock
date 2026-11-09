@@ -1,7 +1,7 @@
 {
   "app": "DemandScope",
-  "release": "webhook-secret-active-2026-11-09-r4",
-  "expected_main_before_merge": "a897e50131fc84173e8e236e06b695755cccb085",
+  "release": "pro-import-link-hardening-2026-11-09-r5",
+  "expected_main_before_merge": "d5451ebc0a28c886edab78845ef8062b99de47fa",
   "features": [
     "stripe-test",
     "legal-pages",
@@ -10,7 +10,9 @@
     "google-oidc-foundation",
     "checkout-legal-consent",
     "production-d1-binding",
-    "stripe-webhook-secret"
+    "stripe-webhook-secret",
+    "checkout-link-disabled",
+    "pro-auto-analyze-import"
   ],
   "d1_database": "demandscope-web-stock",
   "cloudflare_git_reconnected": true

@@ -1,7 +1,8 @@
 import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError} from '../../server/stripe.js';
 import {LEGAL_VERSION} from '../../server/legal.js';
 import {authConfigured,authenticatedMember} from '../../server/auth.js';
-function validBuyerEmail(value){return typeof value==='string'&&value.length<=254&&/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value)}\nexport async function onRequestPost({request,env}){
+function validBuyerEmail(value){return typeof value==='string'&&value.length<=254&&/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value)}
+export async function onRequestPost({request,env}){
  if(!isConfigured(env))return json({error:'Stripeテスト接続が未設定です。管理者の設定後に利用できます。'},503);
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
  let input={};try{input=await request.json()}catch{}

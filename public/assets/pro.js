@@ -16,7 +16,7 @@ async function checkMemberAuth(){
   const box=$('memberAuth');if(!memberState.configured){box.classList.add('hidden');return memberState}
   box.classList.remove('hidden');$('memberAuthTitle').textContent=memberState.authenticated?(lang()==='en'?'Member signed in':'会員ログイン済み'):(lang()==='en'?'Member sign-in':'会員認証');
   $('memberAuthText').textContent=memberState.authenticated?(memberState.member?.email|| (lang()==='en'?'Authenticated Google member':'Google会員として認証済み')):(memberState.required?(lang()==='en'?'Google sign-in is required before Checkout.':'Checkout前にGoogleログインが必要です。'):(lang()==='en'?'Google sign-in is available for account-linked access.':'アカウント連携用のGoogleログインを利用できます。'));
-  $('googleLogin').classList.toggle('hidden',memberState.authenticated);$('memberLogout').classList.toggle('hidden',!memberState.authenticated);return memberState
+  $('googleLogin').classList.toggle('hidden',memberState.authenticated);$('memberLogout').classList.toggle('hidden',!memberState.authenticated);const buyer=$('buyerEmail');if(buyer){if(memberState.authenticated&&memberState.member?.email){buyer.value=memberState.member.email;buyer.disabled=true}else buyer.disabled=false}return memberState
  }catch{memberState={configured:false,authenticated:false,required:false};$('memberAuth')?.classList.add('hidden');return memberState}
 }
 async function checkStripeHealth(){
@@ -54,8 +54,9 @@ $('checkout').addEventListener('click',async()=>{
  clearWarn();$('checkoutError').classList.add('hidden');const button=$('checkout');const original=button.textContent;button.disabled=true;button.textContent=lang()==='en'?'Connecting to Stripe…':'Stripeに接続中…';
  try{
   if(memberState.required&&!memberState.authenticated)throw new Error(lang()==='en'?'Google sign-in is required before Checkout.':'Checkout前にGoogleログインが必要です。');
+  const buyerEmail=$('buyerEmail')?.value.trim()||'';if(!memberState.authenticated&&(!$('buyerEmail')?.checkValidity()||!buyerEmail))throw new Error(lang()==='en'?'Enter the buyer email that Stripe should use for billing and subscription management.':'Stripeの決済・契約管理に使用する購入者メールアドレスを入力してください。');
   if(!$('legalConsent')?.checked)throw new Error(lang()==='en'?'Please accept the terms, privacy policy, and billing conditions before Checkout.':'決済前に利用規約・プライバシーポリシー・課金条件への同意が必要です。');
-  const x=await call('/api/checkout',{accept_terms:true});
+  const x=await call('/api/checkout',{accept_terms:true,buyer_email:buyerEmail});
   if(!x.url)throw new Error(lang()==='en'?'Checkout URL was not returned.':'決済URLが返されませんでした。');location.assign(x.url)
  }
  catch(e){const message=e.message||String(e);warn(message);$('checkoutError').textContent=message;$('checkoutError').classList.remove('hidden');await checkStripeHealth();button.disabled=false;button.textContent=original}

@@ -18,7 +18,7 @@ test('same-origin checkout is not blocked by a stale APP_ORIGIN override',async(
  try{
   globalThis.fetch=async(_url,opt)=>{posted=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/origin-fix'}))};
   const stale={...env,APP_ORIGIN:'https://stale.example.com'};
-  const res=await checkout({request:request('/api/checkout','http://localhost:8788',{accept_terms:true}),env:stale});
+  const res=await checkout({request:request('/api/checkout','http://localhost:8788',{accept_terms:true,buyer_email:'buyer@example.com'}),env:stale});
   assert.equal(res.status,200);
   assert.match(posted.get('success_url'),/^http:\/\/localhost:8788\/pro\//);
   assert.match(posted.get('cancel_url'),/^http:\/\/localhost:8788\/pro\//);
@@ -28,13 +28,25 @@ test('same-origin Referer is accepted when browser omits Origin',async()=>{
  const old=globalThis.fetch;
  try{
   globalThis.fetch=async()=>new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/referer-fix'}));
-  const req=new Request('http://localhost:8788/api/checkout',{method:'POST',headers:{Referer:'http://localhost:8788/pro/','Content-Type':'application/json'},body:JSON.stringify({accept_terms:true})});
+  const req=new Request('http://localhost:8788/api/checkout',{method:'POST',headers:{Referer:'http://localhost:8788/pro/','Content-Type':'application/json'},body:JSON.stringify({accept_terms:true,buyer_email:'buyer@example.com'})});
   const res=await checkout({request:req,env});
   assert.equal(res.status,200);
  }finally{globalThis.fetch=old}
 });
+test('checkout requires a valid buyer email when Google member auth is absent',async()=>{
+ const missing=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env});assert.equal(missing.status,400);
+ const invalid=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'not-an-email'}),env});assert.equal(invalid.status,400);
+});
+test('checkout forwards buyer email to Stripe Customer without storing it in metadata',async()=>{
+ const old=globalThis.fetch;let seen;
+ try{globalThis.fetch=async(_url,opt)=>{seen=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/buyer-email'}))};
+ const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'SECOND.BUYER@example.com'}),env});assert.equal(res.status,200);
+ assert.equal(seen.get('customer_email'),'second.buyer@example.com');assert.equal(seen.get('metadata[buyer_email]'),null);
+ }finally{globalThis.fetch=old}
+});
+
 test('verify unavailable without secrets',async()=>{const res=await verify({request:request('/api/entitlement'),env:{}});const body=await res.json();assert.equal(body.active,false);assert.equal(body.configured,false);assert.deepEqual(body.missing,['STRIPE_SECRET_KEY','SESSION_SECRET']);assert.deepEqual(body.issues,[{name:'STRIPE_SECRET_KEY',reason:'missing'},{name:'SESSION_SECRET',reason:'missing'}]);assert.equal(body.mode,'test')});
-test('checkout uses configured Price ID only',async()=>{const old=globalThis.fetch;try{let seen=null;globalThis.fetch=async(_url,opt)=>{seen=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env});assert.equal(res.status,200);assert.equal(seen.get('line_items[0][price]'),'price_valid');assert.equal(seen.get('mode'),'subscription');assert.equal(seen.get('wallet_options[link][display]'),'never');assert.match(seen.get('client_reference_id'),/^[A-Za-z0-9_-]{40,50}$/);assert.match(res.headers.get('Set-Cookie'),/demand_checkout=/);assert.match(seen.get('success_url'),/session_id=/)}finally{globalThis.fetch=old}});
+test('checkout uses configured Price ID only',async()=>{const old=globalThis.fetch;try{let seen=null;globalThis.fetch=async(_url,opt)=>{seen=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env});assert.equal(res.status,200);assert.equal(seen.get('line_items[0][price]'),'price_valid');assert.equal(seen.get('mode'),'subscription');assert.equal(seen.get('wallet_options[link][display]'),'never');assert.match(seen.get('client_reference_id'),/^[A-Za-z0-9_-]{40,50}$/);assert.match(res.headers.get('Set-Cookie'),/demand_checkout=/);assert.match(seen.get('success_url'),/session_id=/)}finally{globalThis.fetch=old}});
 test('signed entitlement returns false on tampered cookie, active on valid cookie',async()=>{const old=globalThis.fetch;try{globalThis.fetch=async()=>new Response(JSON.stringify(sub));const cookie=(await issueCookie('sub_test123','cus_test123',env,false)).split(';')[0];assert.ok(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie}),env));assert.equal(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie+'x'}),env),null);const bad=await verifiedSubscription(env,'sub_test123');assert.equal(bad.status,'active');globalThis.fetch=async()=>new Response(JSON.stringify({...sub,status:'canceled'}));assert.equal(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie}),env),null)}finally{globalThis.fetch=old}});
 test('checkout activation binds to initiating browser and rejects replay',async()=>{const old=globalThis.fetch;try{
  const start=await checkoutBrowserState(env,false);
@@ -66,7 +78,7 @@ test('inline JPY100 test checkout works without product Price ID or explicit ori
  assert.ok(isConfigured(simple));assert.equal(TEST_MONTHLY_JPY,100);assert.deepEqual(configurationMissing(simple),[]);
  const old=globalThis.fetch;let posted;
  try{globalThis.fetch=async(_url,opts)=>{posted=new URLSearchParams(opts.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/test-session'}))};
- const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env:simple});
+ const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:simple});
  assert.equal(res.status,200);assert.equal(posted.get('line_items[0][price_data][unit_amount]'),'100');
  assert.equal(posted.get('line_items[0][price_data][currency]'),'jpy');
  assert.equal(posted.get('line_items[0][price_data][recurring][interval]'),'month');
@@ -126,7 +138,7 @@ test('restricted test API key is allowed; restricted live API key is rejected',a
  const old=globalThis.fetch;let seenHeader='';
  try {
    globalThis.fetch=async (_url,opts)=>{seenHeader=opts.headers.Authorization;return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};
-   const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env:restricted});
+   const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:restricted});
    assert.equal(res.status,200);
    assert.equal(seenHeader,'Bearer rk_test_sample_restricted_123');
  }finally{globalThis.fetch=old}
@@ -137,7 +149,7 @@ test('Stripe API errors preserve safe diagnostic fields without exposing credent
  const old=globalThis.fetch;
  try{
   globalThis.fetch=async()=>new Response(JSON.stringify({error:{type:'invalid_request_error',code:'permission_missing',message:'This API key does not have permission to perform this request.',param:null}}),{status:403,headers:{'request-id':'req_test_diag_123','content-type':'application/json'}});
-  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env:{STRIPE_SECRET_KEY:'rk_test_restricted_diag',SESSION_SECRET:'D'.repeat(48)}});
+  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:{STRIPE_SECRET_KEY:'rk_test_restricted_diag',SESSION_SECRET:'D'.repeat(48)}});
   assert.equal(res.status,502);const body=await res.json();
   assert.equal(body.stripe_code,'permission_missing');assert.equal(body.request_id,'req_test_diag_123');assert.match(body.hint,/Checkout Sessions/);assert.ok(!JSON.stringify(body).includes('rk_test_restricted_diag'));
  }finally{globalThis.fetch=old}
@@ -173,7 +185,7 @@ test('Stripe Authorization uses normalized secret value',async()=>{
  try{
   globalThis.fetch=async(_url,opt)=>{auth=opt.headers.Authorization;return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};
   const trimmed={STRIPE_SECRET_KEY:'  rk_test_trimmed_123  ',SESSION_SECRET:'  '+'T'.repeat(40)+'  '};
-  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env:trimmed});
+  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:trimmed});
   assert.equal(res.status,200);assert.equal(auth,'Bearer rk_test_trimmed_123');
  }finally{globalThis.fetch=old}
 });
@@ -187,7 +199,7 @@ test('checkout records legal version and accepted timestamp in Stripe metadata',
  const old=globalThis.fetch;let form;
  try{
   globalThis.fetch=async(_url,opt)=>{form=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/legal'}))};
-  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env});
+  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env});
   assert.equal(res.status,200);
   assert.equal(form.get('metadata[legal_version]'),'2026-11-08');
   assert.equal(form.get('subscription_data[metadata][legal_version]'),'2026-11-08');
@@ -226,7 +238,7 @@ test('Google OIDC foundation emits state+PKCE redirect only when D1 and credenti
 });
 test('AUTH_REQUIRED blocks Checkout until a member is signed in',async()=>{
  const authEnv={...env,DB:memberDb(),GOOGLE_CLIENT_ID:'client.apps.googleusercontent.com',GOOGLE_CLIENT_SECRET:'secret',AUTH_REQUIRED:'true'};
- const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env:authEnv});
+ const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:authEnv});
  assert.equal(res.status,401);assert.match((await res.json()).error,/Google/);
 });
 test('authenticated member is attached to Stripe Checkout metadata and email',async()=>{
@@ -235,7 +247,7 @@ test('authenticated member is attached to Stripe Checkout metadata and email',as
  const old=globalThis.fetch;let form;
  try{
   globalThis.fetch=async(_url,opt)=>{form=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/member'}))};
-  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true},{Cookie:cookie}),env:authEnv});
+  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'},{Cookie:cookie}),env:authEnv});
   assert.equal(res.status,200);assert.equal(form.get('metadata[member_id]'),'member_12345678');assert.equal(form.get('subscription_data[metadata][member_id]'),'member_12345678');assert.equal(form.get('customer_email'),'buyer@example.com');
  }finally{globalThis.fetch=old}
 });

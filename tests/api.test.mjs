@@ -229,8 +229,8 @@ test('checkout records legal version and accepted timestamp in Stripe metadata',
   globalThis.fetch=async(_url,opt)=>{form=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/legal'}))};
   const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env});
   assert.equal(res.status,200);
-  assert.equal(form.get('metadata[legal_version]'),'2026-11-08');
-  assert.equal(form.get('subscription_data[metadata][legal_version]'),'2026-11-08');
+  assert.equal(form.get('metadata[legal_version]'),'2026-11-10');
+  assert.equal(form.get('subscription_data[metadata][legal_version]'),'2026-11-10');
   assert.match(form.get('metadata[legal_accepted_at]'),/^\d{10}$/);
  }finally{globalThis.fetch=old}
 });
@@ -238,7 +238,7 @@ test('checkout records legal version and accepted timestamp in Stripe metadata',
 test('checkout completion records acceptance without downgrading subscription lifecycle status',()=>{
  const event={id:'evt_test_checkout',type:'checkout.session.completed',created:1794208204,livemode:false,data:{object:{
   id:'cs_test_linkage123',mode:'subscription',customer:'cus_test123',subscription:'sub_test123',livemode:false,
-  metadata:{app:'demand-scope-pro',legal_version:'2026-11-08',legal_accepted_at:'1794208087'}
+  metadata:{app:'demand-scope-pro',legal_version:'2026-11-10',legal_accepted_at:'1794208087'}
  }}};
  const acceptance=checkoutAcceptanceFromEvent(event);
  assert.equal(acceptance.customer,'cus_test123');

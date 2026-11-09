@@ -4,6 +4,7 @@ export function json(body,status=200,headers={}) {const h=new Headers({'Content-
 // Billing defaults to TEST. Live billing is enabled only when LIVE_BILLING_ENABLED=true
 // AND a dedicated live Stripe key + live recurring Price ID are configured.
 export const TEST_MONTHLY_JPY=100;
+export const LIVE_MONTHLY_JPY=980;
 function normalizedSecret(value){return typeof value==='string'?value.trim():''}
 function normalizedValue(value){return typeof value==='string'?value.trim():''}
 export function billingMode(env){return env?.LIVE_BILLING_ENABLED==='true'?'live':'test'}
@@ -36,6 +37,25 @@ export function configurationDiagnostics(env){
 }
 export function configurationMissing(env){return [...new Set(configurationDiagnostics(env).map(x=>x.name))]}
 export function isConfigured(env){return configurationMissing(env).length===0}
+export function validateLivePriceObject(price){
+ const product=price?.product;
+ if(price?.livemode!==true)return {ok:false,reason:'not_live'};
+ if(price?.active!==true)return {ok:false,reason:'inactive'};
+ if(price?.currency!=='jpy')return {ok:false,reason:'currency'};
+ if(price?.unit_amount!==LIVE_MONTHLY_JPY)return {ok:false,reason:'amount'};
+ if(price?.recurring?.interval!=='month'||Number(price?.recurring?.interval_count||1)!==1)return {ok:false,reason:'interval'};
+ if(!product||typeof product!=='object')return {ok:false,reason:'product_not_expanded'};
+ if(product.active!==true)return {ok:false,reason:'product_inactive'};
+ if(product.metadata?.app!=='demand-scope-pro'||product.metadata?.tier!=='pro')return {ok:false,reason:'product_metadata'};
+ return {ok:true,reason:null,price};
+}
+export async function verifyLivePrice(env){
+ if(billingMode(env)!=='live')return {ok:false,reason:'not_live_mode'};
+ const priceId=activePriceId(env);
+ if(!priceId)return {ok:false,reason:'missing'};
+ const price=await stripe(env,`/prices/${encodeURIComponent(priceId)}?expand[]=product`);
+ return validateLivePriceObject(price);
+}
 function trustedRequestOrigin(request){
  if(!request)throw new Error('Request required');
  const value=new URL(request.url);

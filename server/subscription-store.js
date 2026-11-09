@@ -2,6 +2,16 @@ function id(value,prefix){return typeof value==='string'&&value.startsWith(prefi
 function firstPrice(sub){const item=sub?.items?.data?.[0];return id(item?.price?.id,'price_')}
 function periodEnd(sub){const candidates=[sub?.current_period_end,sub?.items?.data?.[0]?.current_period_end];for(const v of candidates)if(Number.isInteger(v)&&v>0)return v;return null}
 
+export function checkoutAcceptanceFromEvent(event){
+ const obj=event?.data?.object||{};
+ if(event?.type!=='checkout.session.completed'||obj.mode!=='subscription')return null;
+ const session=id(obj.id,'cs_'),customer=id(obj.customer,'cus_'),subscription=id(obj.subscription,'sub_');
+ const version=typeof obj.metadata?.legal_version==='string'?obj.metadata.legal_version:null;
+ const acceptedAt=Number(obj.metadata?.legal_accepted_at);
+ if(!session||!version||!Number.isInteger(acceptedAt)||acceptedAt<=0)return null;
+ return {session,customer,subscription,legalVersion:version,acceptedAt,livemode:obj.livemode===true};
+}
+
 export function subscriptionMutationFromEvent(event){
  const type=event?.type,obj=event?.data?.object||{};
  if(['customer.subscription.created','customer.subscription.updated','customer.subscription.deleted'].includes(type)){
@@ -23,7 +33,12 @@ export async function persistStripeEvent(db,event){
  await db.prepare('INSERT OR IGNORE INTO stripe_events(event_id,event_type,stripe_created,livemode) VALUES(?,?,?,?)')
   .bind(event.id,event.type,Number.isInteger(event.created)?event.created:null,event.livemode===true?1:0).run();
  const mutation=subscriptionMutationFromEvent(event);
+ const acceptance=checkoutAcceptanceFromEvent(event);
  try{
+  if(acceptance){
+   await db.prepare(`INSERT OR IGNORE INTO checkout_acceptances(stripe_checkout_session_id,stripe_customer_id,stripe_subscription_id,legal_version,accepted_at,livemode)
+VALUES(?,?,?,?,?,?)`).bind(acceptance.session,acceptance.customer,acceptance.subscription,acceptance.legalVersion,acceptance.acceptedAt,acceptance.livemode?1:0).run();
+  }
   if(mutation){
    await db.prepare(`INSERT INTO subscriptions(stripe_subscription_id,stripe_customer_id,status,price_id,current_period_end,cancel_at_period_end,livemode,updated_at)
 VALUES(?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
@@ -34,7 +49,7 @@ cancel_at_period_end=excluded.cancel_at_period_end,livemode=excluded.livemode,up
     .bind(mutation.subscription,mutation.customer,mutation.status,mutation.price,mutation.currentPeriodEnd,mutation.cancelAtPeriodEnd?1:0,mutation.livemode?1:0).run();
   }
   await db.prepare('UPDATE stripe_events SET processed_at=CURRENT_TIMESTAMP,last_error=NULL WHERE event_id=?').bind(event.id).run();
-  return {duplicate:false,mutation};
+  return {duplicate:false,mutation,acceptance};
  }catch(e){
   const message=String(e?.message||e).slice(0,500);
   try{await db.prepare('UPDATE stripe_events SET last_error=? WHERE event_id=?').bind(message,event.id).run()}catch{}

@@ -37,7 +37,7 @@ const en={
 '選択商品の分布と結果テキスト':'Distribution and downloadable report for each product',
 '🔒 Stripe テスト決済で利用開始':'🔒 Unlock via Stripe test checkout',
 '現在はテスト段階です。本番請求は発生しません。価格はStripeテスト設定で決定します。':'This is a test environment. No live charges are made. Pricing is configured in Stripe test mode.',
-'テスト決済へ進む':'Open test checkout','契約管理（Stripe）':'Manage subscription (Stripe)','メールで契約管理にログイン（Stripe）':'Email me a Stripe portal login link','別端末やCookie削除後でも、決済時のメールアドレスでStripeの契約管理リンクを受け取れます。':'Use the email from checkout to receive a Stripe-hosted subscription management link, even on another device or after cookies are cleared.','この端末からサインアウト':'Sign out on this device',
+'購入者メールアドレス':'Buyer email','このメールをStripe Customerに紐付けます。DemandScopeでは保存せず、決済・請求・契約管理はStripeが担当します。':'This email is attached to the Stripe Customer. DemandScope does not store it; Stripe handles payment, billing and subscription management.','テスト決済へ進む':'Open test checkout','契約管理（Stripe）':'Manage subscription (Stripe)','メールで契約管理にログイン（Stripe）':'Email me a Stripe portal login link','別端末やCookie削除後でも、決済時のメールアドレスでStripeの契約管理リンクを受け取れます。':'Use the email from checkout to receive a Stripe-hosted subscription management link, even on another device or after cookies are cleared.','この端末からサインアウト':'Sign out on this device',
 '※ データは端末内のブラウザに保存。端末間同期や自動バックアップはありません。':'Data is saved only in this browser. No cross-device sync or automatic backup.',
 '商品別リスクダッシュボード':'Product risk dashboard','発注点・推奨安全在庫・欠品確率を比較':'Compare reorder points, safety stock and stockout probability',
 '契約を確認中...':'Checking subscription…','登録可能商品':'Product series','複数':'Multiple','一括分析':'Batch analysis','回/商品':'runs/product',

@@ -8,7 +8,7 @@ const T={
   ltsd:'リードタイム需要SD',safety:'安全在庫',reorder:'推奨発注点',inventory:'現在庫',
   risk:'在庫切れ確率',p50:'P50',p90:'P90',p95:'P95',p99:'P99',z:'直近の乖離（σ）',
   runs:'試行回数',warnings:'注意事項',none:'なし',notEntered:'未入力',distribution:'リードタイム需要分布',
-  driver:'採用根拠',sma:'単純移動平均',overall:'全体平均',
+  driver:'採用根拠',sma:'単純移動平均',overall:'全体平均',overview:'総合所見',priorities:'優先確認',actions:'推奨アクション',
   limit:'前提: 将来の日次需要は一定基準＋独立な正規乱数×残差標準偏差、需要は0未満を0に補正し、リードタイムは固定とします。季節性・休日・自己相関・入荷遅延・欠品による売上欠測等は直接扱いません。発注点は在庫ポジション管理の目安であり、現在庫だけをそのまま発注判断に使わないでください。推計値は実際の欠品や販売成果を保証しません。',
   save:'印刷画面の保存先で「PDFに保存」を選択してください。'
  },
@@ -19,7 +19,7 @@ const T={
   ltsd:'Lead-time demand SD',safety:'Safety stock',reorder:'Reorder point',inventory:'On-hand stock',
   risk:'Stockout probability',p50:'P50',p90:'P90',p95:'P95',p99:'P99',z:'Latest deviation (σ)',
   runs:'Simulation runs',warnings:'Cautions',none:'None',notEntered:'Not entered',distribution:'Lead-time demand distribution',
-  driver:'Volatility driver',sma:'Simple moving average',overall:'Overall mean',
+  driver:'Volatility driver',sma:'Simple moving average',overall:'Overall mean',overview:'Portfolio interpretation',priorities:'Priority review',actions:'Recommended actions',
   limit:'Assumptions: constant baseline plus independent normally distributed residuals, non-negative demand floor and fixed lead time. Seasonality, holidays, autocorrelation, lead-time uncertainty and lost-sales censoring are not modeled directly. Reorder point is a benchmark for inventory-position management; do not use on-hand stock alone as the replenishment trigger. Estimates do not guarantee stockout or sales outcomes.',
   save:'In the print dialog, select Save as PDF as your destination.'
  }
@@ -32,6 +32,32 @@ function tableFor(columns,rows,klass=''){const table=document.createElement('tab
 function section(label,klass=''){const s=document.createElement('section');s.className=['pdf-section',klass].filter(Boolean).join(' ');s.append(cell('h2',label));return s}
 function methodLabel(r,t){return r.method==='sma'?t.sma+(r.window?' ('+r.window+')':''):t.overall}
 function driverLabel(r){return r.volatilityDriver==='recent'?'recent':r.volatilityDriver==='ewma'?'EWMA':'long'}
+export function portfolioNarrative({results,language='ja'}){
+ if(!Array.isArray(results)||!results.length)throw new Error('No results to summarize');
+ const isEn=language==='en';
+ const known=results.filter(x=>x?.result?.inventory!==null&&Number.isFinite(Number(x?.result?.stockout)));
+ const near=results.filter(x=>x?.result?.inventory!==null&&Number(x.result.inventory)<=Number(x.result.reorderPoint)*1.05);
+ const volatility=results.filter(x=>['recent','ewma'].includes(x?.result?.volatilityDriver));
+ const warningCount=results.reduce((sum,x)=>sum+(Array.isArray(x?.result?.flags)?x.result.flags.length:0),0);
+ const ranked=[...results].sort((a,b)=>{const ar=Number.isFinite(Number(a?.result?.stockout))?Number(a.result.stockout):-1;const br=Number.isFinite(Number(b?.result?.stockout))?Number(b.result.stockout):-1;if(br!==ar)return br-ar;const ag=a?.result?.inventory===null?-Infinity:Number(a.result.reorderPoint)-Number(a.result.inventory);const bg=b?.result?.inventory===null?-Infinity:Number(b.result.reorderPoint)-Number(b.result.inventory);return bg-ag;});
+ const overview=[];
+ if(isEn){
+  overview.push(String(results.length)+' product'+(results.length===1?'':'s')+' were compared using the same 4,000-run inventory-risk framework.');
+  if(known.length){const top=[...known].sort((a,b)=>Number(b.result.stockout)-Number(a.result.stockout))[0];overview.push('Among products with on-hand inventory entered, '+top.name+' has the highest estimated stockout probability at '+pct(top.result.stockout,language)+'.')}else overview.push('On-hand inventory is not entered, so stockout probabilities cannot yet be compared across products.');
+  overview.push(near.length?(String(near.length)+' product'+(near.length===1?' is':'s are')+' at or within 5% above the estimated reorder point and should be reviewed first.'):'No product with entered inventory is currently at or within 5% above its estimated reorder point.');
+ }else{
+  overview.push(String(results.length)+'商品を、同一の4,000回シミュレーション条件で比較しています。');
+  if(known.length){const top=[...known].sort((a,b)=>Number(b.result.stockout)-Number(a.result.stockout))[0];overview.push('現在庫が入力された商品の中では、'+top.name+'の推定欠品確率が最も高く、'+pct(top.result.stockout,language)+'です。')}else overview.push('現在庫が入力されていないため、商品間の欠品確率比較はまだできません。');
+  overview.push(near.length?('現在庫が推奨発注点以下、または発注点の5%以内にある商品が'+near.length+'件あります。これらは優先して在庫ポジションを確認してください。'):'現在庫が入力された範囲では、推奨発注点以下または5%以内の商品はありません。');
+ }
+ const priorities=ranked.slice(0,Math.min(3,ranked.length)).map(x=>{const r=x.result;if(r.inventory!==null&&Number.isFinite(Number(r.stockout))){return isEn?x.name+': on-hand '+n(r.inventory,language)+', reorder point '+n(r.reorderPoint,language)+', estimated stockout '+pct(r.stockout,language)+'. Check inventory position and inbound orders before acting.':x.name+'：現在庫 '+n(r.inventory,language)+'、推奨発注点 '+n(r.reorderPoint,language)+'、推定欠品確率 '+pct(r.stockout,language)+'。発注判断前に在庫ポジションと入荷予定を確認してください。';}return isEn?x.name+': reorder point '+n(r.reorderPoint,language)+'. Enter on-hand inventory to estimate stockout probability.':x.name+'：推奨発注点 '+n(r.reorderPoint,language)+'。現在庫を入力すると欠品確率まで確認できます。';});
+ const actions=[];
+ if(near.length)actions.push(isEn?'Review the '+near.length+' product(s) closest to or below reorder point before lower-priority items.':'発注点以下または近接している'+near.length+'商品を、他の商品より先に確認してください。');
+ if(volatility.length)actions.push(isEn?volatility.length+' product(s) use recent/EWMA volatility as the conservative driver; check for promotions, seasonality or structural demand changes.':volatility.length+'商品では直近または指数加重ボラティリティが保守推定の採用根拠です。販促・季節性・需要構造の変化がないか確認してください。');
+ if(warningCount)actions.push(isEn?'There are '+warningCount+' model caution flag(s). Review each SKU caution section before using the numbers operationally.':'モデル上の注意事項が合計'+warningCount+'件あります。実務判断に使う前に各SKUの注意事項を確認してください。');
+ actions.push(isEn?'Use inventory position (on-hand + on-order - committed), not on-hand stock alone, when comparing against the reorder point.':'発注点との比較には、現在庫だけでなく「手持ち＋発注残−引当済」の在庫ポジションを使用してください。');
+ return {overview,priorities,actions};
+}
 export function riskReportModel({results,language='ja'}){
  if(!Array.isArray(results)||!results.length)throw new Error('No results to export');
  const t=T[language==='en'?'en':'ja'];
@@ -71,7 +97,13 @@ export function printRiskReport({results,language='ja'}){
  root.append(cell('h1',t.title));
  const stamp=new Intl.DateTimeFormat(locale(language),{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date());
  const dt=cell('p',t.generated+': '+stamp);dt.className='pdf-muted';root.append(dt);
+ const narrative=portfolioNarrative({results,language});
  const summary=section(t.summary,'pdf-summary');summary.append(tableFor([t.product,t.reorder,t.safety,t.risk,t.warnings],model.map(x=>x.summary),'pdf-summary-table'));root.append(summary);
+ const overview=section(t.overview,'pdf-narrative');narrative.overview.forEach(v=>overview.append(cell('p',v)));root.append(overview);
+ const narrativeGrid=document.createElement('div');narrativeGrid.className='pdf-narrative-grid';
+ const priorityBox=section(t.priorities,'pdf-narrative-box');const priorityList=document.createElement('ol');narrative.priorities.forEach(v=>priorityList.append(cell('li',v)));priorityBox.append(priorityList);
+ const actionBox=section(t.actions,'pdf-narrative-box');const actionList=document.createElement('ul');narrative.actions.forEach(v=>actionList.append(cell('li',v)));actionBox.append(actionList);
+ narrativeGrid.append(priorityBox,actionBox);root.append(narrativeGrid);
  model.forEach((item,i)=>{
   const s=section(t.details+' '+(i+1)+' / '+model.length+' · '+item.name,'pdf-detail');s.classList.add('pdf-newpage');
   const paired=[];for(let j=0;j<item.details.length;j+=2){const a=item.details[j],b=item.details[j+1]||['',''];paired.push([a[0],a[1],b[0],b[1]])}

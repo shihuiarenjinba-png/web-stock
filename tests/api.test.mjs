@@ -11,6 +11,26 @@ const sess={livemode:false,mode:'subscription',status:'complete',payment_status:
 const sub={livemode:false,status:'active',metadata:{app:'demand-scope-pro'},customer:'cus_test123',items:{data:[{price:{id:'price_valid'}}]}};
 test('test-mode-only config',()=>{assert.ok(isConfigured(env));assert.ok(!isConfigured({...env,STRIPE_SECRET_KEY:'sk_live_forbidden'}));assert.ok(!isConfigured({...env,SESSION_SECRET:'short'}))});
 test('reject wrong origin before Stripe',async()=>{const res=await checkout({request:request('/api/checkout','https://evil.test',{}),env});assert.equal(res.status,403)});
+test('same-origin checkout is not blocked by a stale APP_ORIGIN override',async()=>{
+ const old=globalThis.fetch;let posted;
+ try{
+  globalThis.fetch=async(_url,opt)=>{posted=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/origin-fix'}))};
+  const stale={...env,APP_ORIGIN:'https://stale.example.com'};
+  const res=await checkout({request:request('/api/checkout','http://localhost:8788',{accept_terms:true}),env:stale});
+  assert.equal(res.status,200);
+  assert.match(posted.get('success_url'),/^http:\/\/localhost:8788\/pro\//);
+  assert.match(posted.get('cancel_url'),/^http:\/\/localhost:8788\/pro\//);
+ }finally{globalThis.fetch=old}
+});
+test('same-origin Referer is accepted when browser omits Origin',async()=>{
+ const old=globalThis.fetch;
+ try{
+  globalThis.fetch=async()=>new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/referer-fix'}));
+  const req=new Request('http://localhost:8788/api/checkout',{method:'POST',headers:{Referer:'http://localhost:8788/pro/','Content-Type':'application/json'},body:JSON.stringify({accept_terms:true})});
+  const res=await checkout({request:req,env});
+  assert.equal(res.status,200);
+ }finally{globalThis.fetch=old}
+});
 test('verify unavailable without secrets',async()=>{const res=await verify({request:request('/api/entitlement'),env:{}});const body=await res.json();assert.equal(body.active,false);assert.equal(body.configured,false);assert.deepEqual(body.missing,['STRIPE_SECRET_KEY','SESSION_SECRET']);assert.deepEqual(body.issues,[{name:'STRIPE_SECRET_KEY',reason:'missing'},{name:'SESSION_SECRET',reason:'missing'}]);assert.equal(body.mode,'test')});
 test('checkout uses configured Price ID only',async()=>{const old=globalThis.fetch;try{let seen=null;globalThis.fetch=async(_url,opt)=>{seen=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env});assert.equal(res.status,200);assert.equal(seen.get('line_items[0][price]'),'price_valid');assert.equal(seen.get('mode'),'subscription');assert.match(seen.get('client_reference_id'),/^[A-Za-z0-9_-]{40,50}$/);assert.match(res.headers.get('Set-Cookie'),/demand_checkout=/);assert.match(seen.get('success_url'),/session_id=/)}finally{globalThis.fetch=old}});
 test('signed entitlement returns false on tampered cookie, active on valid cookie',async()=>{const old=globalThis.fetch;try{globalThis.fetch=async()=>new Response(JSON.stringify(sub));const cookie=(await issueCookie('sub_test123','cus_test123',env,false)).split(';')[0];assert.ok(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie}),env));assert.equal(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie+'x'}),env),null);const bad=await verifiedSubscription(env,'sub_test123');assert.equal(bad.status,'active');globalThis.fetch=async()=>new Response(JSON.stringify({...sub,status:'canceled'}));assert.equal(await entitlement(request('/api/entitlement',undefined,null,{Cookie:cookie}),env),null)}finally{globalThis.fetch=old}});

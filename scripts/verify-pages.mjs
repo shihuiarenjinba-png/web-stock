@@ -75,3 +75,4 @@ if (!/id="legalConsent"/.test(proHtml)) throw new Error('Pro checkout must requi
 if (!/id="memberAuth"/.test(proHtml)) throw new Error('Pro surface must include member authentication UI.');
 if (!/id="buyerEmail"/.test(proHtml)) throw new Error('Pro checkout must collect an explicit buyer email.');
 if (!/10分以上届かない場合/.test(proHtml)) throw new Error('Pro surface must explain Stripe portal email delay and recovery guidance.');
+if (!/未購入のメールアドレスには送られません/.test(proHtml)) throw new Error('Pro surface must explain that portal email requires a completed purchase for that email.');

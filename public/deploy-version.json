@@ -1,0 +1,12 @@
+{
+  "app": "DemandScope",
+  "release": "commercial-auth-2026-11-09-r1",
+  "features": [
+    "stripe-test",
+    "legal-pages",
+    "d1-schema",
+    "webhook-persistence",
+    "google-oidc-foundation"
+  ],
+  "expected_after_merge": true
+}

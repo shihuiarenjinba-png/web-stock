@@ -6,6 +6,16 @@ import {printRiskReport} from './pdf-report.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
 let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null,memberState={configured:false,authenticated:false,required:false};
 const KEY='demandscope_pro_skus_v1';
+function liveBilling(){return stripeHealth?.mode==='live'}
+function applyBillingMode(){
+ const live=liveBilling();
+ const badge=$('billingModeBadge');if(badge)badge.textContent=live?'PRO PLAN · LIVE':'PRO PLAN · TEST MODE';
+ const label=$('billingPlanLabel');if(label)label.textContent=live?'Pro 月額プラン':'テスト月額プラン';
+ const price=$('billingPlanPrice');if(price)price.textContent=live?(lang()==='en'?'Live price is shown on Stripe Checkout before purchase.':'本番価格は購入確定前にStripe Checkoutで表示されます。'):'100円/月（Stripeテストモード・実請求なし）';
+ const renewal=$('billingPlanRenewal');if(renewal)renewal.textContent=live?(lang()==='en'?'Monthly auto-renewal. You can cancel from Stripe subscription management.':'月額自動更新。Stripe契約管理画面から解約できます。'):'月額自動更新の動作確認用。解約はStripe契約管理画面から行えます。';
+ const checkout=$('checkout');if(checkout&&!checkout.disabled)checkout.textContent=live?(lang()==='en'?'Continue to payment':'決済へ進む'):(lang()==='en'?'Open test checkout':'テスト決済へ進む');
+ const footer=$('billingFooterLabel');if(footer)footer.textContent=live?'DemandScope Pro':'DemandScope Pro — テスト開発版';
+}
 function warn(msg){$('proAlert').textContent=errorMessage(msg instanceof Error?msg:new Error(msg));$('proAlert').classList.remove('hidden')}
 function clearWarn(){$('proAlert').classList.add('hidden')}
 function toast(v){$('toast').textContent=v;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),2600)}
@@ -24,10 +34,14 @@ async function checkStripeHealth(){
   const res=await fetch('/api/stripe-status',{cache:'no-store'});
   stripeHealth=await res.json();
   const el=$('stripeHealth');
+  applyBillingMode();
   if(!stripeHealth.configured){
    const labels=(stripeHealth.issues||[]).map(i=>{
     if(i.name==='STRIPE_SECRET_KEY'&&i.reason==='pasted_assignment')return lang()==='en'?'Paste only the key value, not STRIPE_SECRET_KEY=...':'値には STRIPE_SECRET_KEY= を付けず、キー本体だけを貼り付けてください';
-    if(i.name==='STRIPE_SECRET_KEY'&&i.reason==='test_key_format')return lang()==='en'?'Stripe key is not sk_test_ / rk_test_':'Stripeキーが sk_test_ / rk_test_ 形式ではありません';
+    if((i.name==='STRIPE_SECRET_KEY'||i.name==='STRIPE_LIVE_SECRET_KEY')&&i.reason==='test_key_format')return lang()==='en'?'Stripe key is not sk_test_ / rk_test_':'Stripeキーが sk_test_ / rk_test_ 形式ではありません';
+    if(i.name==='STRIPE_LIVE_SECRET_KEY'&&i.reason==='live_key_format')return lang()==='en'?'Live Stripe key is not sk_live_ / rk_live_':'本番Stripeキーが sk_live_ / rk_live_ 形式ではありません';
+    if(i.name==='STRIPE_LIVE_SECRET_KEY')return lang()==='en'?'Live Stripe key is missing':'STRIPE_LIVE_SECRET_KEYが未登録です';
+    if(i.name==='STRIPE_LIVE_PRO_PRICE_ID')return lang()==='en'?'Live Stripe Price ID is missing or invalid':'STRIPE_LIVE_PRO_PRICE_IDが未登録または不正です';
     if(i.name==='STRIPE_SECRET_KEY')return lang()==='en'?'Stripe key is missing':'STRIPE_SECRET_KEYが未登録です';
     if(i.name==='SESSION_SECRET'&&i.reason==='too_short')return lang()==='en'?'SESSION_SECRET is shorter than 32 characters':'SESSION_SECRETが32文字未満です';
     if(i.name==='SESSION_SECRET')return lang()==='en'?'SESSION_SECRET is missing':'SESSION_SECRETが未登録です';
@@ -36,20 +50,20 @@ async function checkStripeHealth(){
    el.textContent=(lang()==='en'?'Setup problem: ':'設定エラー: ')+(labels.join(' / ')||stripeHealth.missing?.join(', ')||'unknown');
    el.className='stripe-health bad';return
   }
-  if(stripeHealth.reachable){el.textContent=lang()==='en'?'✓ Stripe API reachable ('+stripeHealth.key_type+')':'✓ Stripe API接続済み（'+stripeHealth.key_type+'）';el.className='stripe-health good';return}
+  if(stripeHealth.reachable){el.textContent=lang()==='en'?`✓ Stripe ${stripeHealth.mode==='live'?'LIVE':'TEST'} API reachable (${stripeHealth.key_type})`:`✓ Stripe ${stripeHealth.mode==='live'?'本番':'テスト'} API接続済み（${stripeHealth.key_type}）`;el.className='stripe-health good';return}
   el.textContent=(lang()==='en'?'Stripe API unreachable: ':'Stripe API未接続: ')+(stripeHealth.detail||stripeHealth.hint||'unknown error');
   el.className='stripe-health bad';
  }catch(e){const el=$('stripeHealth');el.textContent=lang()==='en'?'Stripe connection check failed.':'Stripe接続確認に失敗しました。';el.className='stripe-health bad'}
 }
-async function boot(){try{await checkMemberAuth();await checkStripeHealth();const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(lang()==='en'?'Test checkout verified':'テスト決済を確認しました');}
+async function boot(){try{await checkMemberAuth();await checkStripeHealth();const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(liveBilling()?(lang()==='en'?'Payment verified':'決済を確認しました'):(lang()==='en'?'Test checkout verified':'テスト決済を確認しました'));}
  if(params.get('checkout')==='cancelled'){history.replaceState({},'',location.pathname);warn('決済はキャンセルされました。');}
  if(params.get('auth')==='failed'){history.replaceState({},'',location.pathname);warn(lang()==='en'?'Google sign-in failed.':'Googleログインに失敗しました。');}
  if(params.get('auth')==='ok'){history.replaceState({},'',location.pathname);await checkMemberAuth();toast(lang()==='en'?'Google sign-in completed':'Googleログインを確認しました');}
  const res=await fetch('/api/entitlement',{cache:'no-store'});
- if(!res.ok){access(false,true);warn(lang()==='en'?'Pro requires deployment of Cloudflare Pages Functions and Stripe test configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripeテスト設定のデプロイが必要です。');return;}
+ if(!res.ok){access(false,true);warn(liveBilling()?(lang()==='en'?'Pro requires Cloudflare Pages Functions and Stripe live configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripe本番設定が必要です。'):(lang()==='en'?'Pro requires deployment of Cloudflare Pages Functions and Stripe test configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripeテスト設定のデプロイが必要です。'));return;}
  const state=await res.json();access(!!state.active,state.configured===false);if(state.configured===false&&state.missing?.length)warn((lang()==='en'?'Setup needed: ':'設定が必要です: ')+state.missing.join(', '));if(state.error)warn(state.error);
  }catch(e){access(false,false);warn(e.message)} }
-function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました'):t('🔒 Stripe テスト決済で利用開始');$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。');$('checkout').disabled=unconfigured||(memberState.required&&!memberState.authenticated);if(unconfigured)$('accessText').textContent=lang()==='en'?'Configure the Stripe TEST secret key and session secret on Cloudflare Pages.':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。';if(!unconfigured&&memberState.required&&!memberState.authenticated)$('accessText').textContent=lang()==='en'?'Sign in with Google before starting Checkout.':'決済前にGoogleログインしてください。';if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
+function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(liveBilling()?(lang()==='en'?'✓ Subscription verified':'✓ Pro契約を確認しました'):(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました')):(liveBilling()?(lang()==='en'?'🔒 Start Pro with Stripe':'🔒 Stripe決済で利用開始'):t('🔒 Stripe テスト決済で利用開始'));$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(liveBilling()?(lang()==='en'?'After a verified Stripe subscription, bulk import is unlocked.':'Stripe Checkoutで契約状態を確認後、機能が開放されます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。'));$('checkout').disabled=unconfigured||(memberState.required&&!memberState.authenticated);if(unconfigured)$('accessText').textContent=liveBilling()?(lang()==='en'?'Configure the Stripe LIVE key, live Price ID, and session secret on Cloudflare Pages.':'Cloudflare Pagesに本番Stripeキー・本番Price ID・セッション秘密値を設定してください。'):(lang()==='en'?'Configure the Stripe TEST secret key and session secret on Cloudflare Pages.':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。');if(!unconfigured&&memberState.required&&!memberState.authenticated)$('accessText').textContent=lang()==='en'?'Sign in with Google before starting Checkout.':'決済前にGoogleログインしてください。';applyBillingMode();if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
 $('checkout').addEventListener('click',async()=>{
  clearWarn();$('checkoutError').classList.add('hidden');const button=$('checkout');const original=button.textContent;button.disabled=true;button.textContent=lang()==='en'?'Connecting to Stripe…':'Stripeに接続中…';
  try{

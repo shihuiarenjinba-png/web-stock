@@ -1,14 +1,16 @@
 {
   "app": "DemandScope",
-  "release": "post-git-reconnect-2026-11-09-r2",
-  "expected_main_before_merge": "1f8040277205b34bbe1953968ade2951b5331530",
+  "release": "d1-binding-active-2026-11-09-r3",
+  "expected_main_before_merge": "278c6fafeede8e27d05e217f21a99be1f480b72f",
   "features": [
     "stripe-test",
     "legal-pages",
     "d1-schema",
     "webhook-persistence",
     "google-oidc-foundation",
-    "checkout-legal-consent"
+    "checkout-legal-consent",
+    "production-d1-binding"
   ],
+  "d1_database": "demandscope-web-stock",
   "cloudflare_git_reconnected": true
 }

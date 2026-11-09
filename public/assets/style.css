@@ -61,6 +61,14 @@
  #pdf-print-area .pdf-summary{break-inside:auto;page-break-inside:auto}
  #pdf-print-area thead{display:table-header-group}
  #pdf-print-area .pdf-summary-table{font-size:8.5pt}
+ #pdf-print-area .pdf-narrative{margin:4mm 0 5mm;padding:4mm 5mm;border:1px solid #c9d5da;background:#f7fbfb;border-radius:2mm}
+ #pdf-print-area .pdf-narrative h2{margin:0 0 2mm;font-size:11.5pt}
+ #pdf-print-area .pdf-narrative p{margin:1.2mm 0;font-size:8.7pt;line-height:1.5}
+ #pdf-print-area .pdf-narrative-grid{display:grid;grid-template-columns:1fr 1fr;gap:5mm;margin:0 0 5mm}
+ #pdf-print-area .pdf-narrative-box{margin:0;padding:3.5mm 4mm;border:1px solid #d5dfe3;background:#fbfdfd;border-radius:2mm;break-inside:avoid;page-break-inside:avoid}
+ #pdf-print-area .pdf-narrative-box h2{margin:0 0 2mm;font-size:10.5pt}
+ #pdf-print-area .pdf-narrative-box ul,#pdf-print-area .pdf-narrative-box ol{margin:0;padding-left:5mm;font-size:8.2pt;line-height:1.45}
+ #pdf-print-area .pdf-narrative-box li{margin:0 0 1.5mm}
  #pdf-print-area .pdf-detail-table td:nth-child(1),#pdf-print-area .pdf-detail-table td:nth-child(3){width:24%;font-weight:700}
  #pdf-print-area .pdf-svg{display:block;width:100%;height:auto;max-height:58mm;margin:2mm 0 4mm;border:1px solid #d9e1e4;background:#fff}
  #pdf-print-area .pdf-axis{stroke:#617985;stroke-width:1;fill:none}

@@ -17,6 +17,7 @@ export async function onRequestPost({request,env}){
  ...(member?{'metadata[member_id]':member.id,'subscription_data[metadata][member_id]':member.id}:{}),
  ...(member?.stripe_customer_id?{customer:member.stripe_customer_id}:member?.email?{customer_email:member.email}:{}),
  'payment_method_types[0]':'card',
+ 'wallet_options[link][display]':'never',
  ...(env.STRIPE_PRO_PRICE_ID?{'line_items[0][price]':env.STRIPE_PRO_PRICE_ID}:{
  'line_items[0][price_data][currency]':'jpy',
  'line_items[0][price_data][unit_amount]':String(TEST_MONTHLY_JPY),

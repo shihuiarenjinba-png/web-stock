@@ -113,8 +113,9 @@ function renderImportSeries(){
  if(!series.length)root.textContent=lang()==='en'?'No demand series detected. Try another orientation or sheet.':'需要系列が見つかりません。方向またはシートを変えてください。';
 }
 function renderImportedSheet(){
- importInspection=inspectTable(importBook.sheets[Number($('proSheet').value)].rows);
- $('proOrientation').value=importInspection.orientation;renderImportSeries();renderPreview(importInspection);
+ const next=inspectTable(importBook.sheets[Number($('proSheet').value)].rows);
+ importInspection=next;
+ $('proOrientation').value=importInspection.orientation;renderImportSeries();renderPreview(importInspection);clearWarn();
 }
 $('proFile').addEventListener('change',async ev=>{
  clearWarn();$('proImport').classList.add('hidden');importBook=null;importInspection=null;
@@ -134,12 +135,15 @@ $('proImportRun').addEventListener('click',()=>{
  const errors=[],accepted=[];
  for(const x of list){
    const product={id:(globalThis.crypto?.randomUUID?.() ?? 'sku_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)),name:x.name,lead:7,stock:null,service:95,method:'sma',window:7,data:x.values.join(',')};
-   try{if(x.values.length<10)throw new Error(lang()==='en'?'At least 10 daily values are needed for the default 7-day moving average.':'初期設定の7日移動平均には少なくとも10期が必要です。');accepted.push(product)}
-   catch(e){errors.push(`${x.name}: ${errorMessage(e)}`)}
+   try{
+     if(x.values.length<10)throw new Error(lang()==='en'?'At least 10 daily values are needed for the default 7-day moving average.':'初期設定の7日移動平均には少なくとも10期が必要です。');
+     accepted.push({product,result:analyzeSku(product)});
+   }catch(e){errors.push(`${x.name}: ${errorMessage(e)}`)}
  }
  if(!accepted.length)throw new Error(errors.join(' / '));
- skus.push(...accepted);persist();selected=accepted[0].id;analyses.clear();renderTable();
- toast(lang()==='en'?`Imported ${accepted.length} series.`:`${accepted.length}系列を登録しました。`);
+ for(const {product,result} of accepted){skus.push(product);analyses.set(product.id,result)}
+ persist();selected=accepted[0].product.id;renderTable();clearWarn();
+ toast(lang()==='en'?`Imported and analyzed ${accepted.length} series.`:`${accepted.length}系列を登録・分析しました。`);
  if(errors.length)warn(errors.slice(0,8).join(' / '));
  }catch(e){warn(e)}
 });

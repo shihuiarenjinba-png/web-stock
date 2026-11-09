@@ -1,10 +1,23 @@
 # DemandScope v0.2 — 需要予測・在庫リスクシミュレーター / Demand & Inventory Risk
 
-**日本語 / English · ファイルアップロード中心 · Cloudflare Pages + Stripe TEST環境対応**
+**日本語 / English · ファイルアップロード中心 · Cloudflare Pages · Stripe TEST/LIVE分離対応**
 
 **Cloudflareに接続する際は、[Pages Git連携の設定手順](docs/CLOUDFLARE_PAGES_SETUP_ja.md)を先に参照してください。Workers Buildsの `npx wrangler deploy` は本リポジトリには使用しません。**
 
 会計機能を含まない、過去需要の残差標準偏差と4,000回のモンテカルロ試行による需要・在庫リスクの意思決定支援Webアプリです。需要データの読み込み・計算・CSVレポート出力はすべてブラウザ内で実行し、サーバーへ送信しません。
+
+## 現在の商用公開準備（2026-11-09）
+
+- Pro本番価格: **月額980円**
+- Live課金は明示ゲート `LIVE_BILLING_ENABLED=true` のときだけ有効
+- TEST/LIVEのStripe key・Price・Portal・Webhookを分離
+- Live PriceはCheckout直前に **Live / active / JPY 980 / monthly / DemandScope Pro metadata** を再照合し、不一致なら決済をfail closed
+- D1 Webhook同期・backlog監視・livemode分離済み
+- Pro PDFは全体サマリー＋SKU別詳細＋分布図＋実際の分析警告を出力
+- 本番公開の残件は [商用公開チェックリスト](docs/COMMERCIAL_LAUNCH_CHECKLIST_ja.md) を参照
+
+> 現在は安全のためLive課金スイッチをOFFにしています。Stripe本人確認、Google会員認証、Live Product/Price、法務/返金条件、Live secretsの設定が完了するまで一般向け実課金は開始しません。
+
 
 ## できること
 
@@ -16,9 +29,9 @@
 | 複数系列の合算 | なし（混同を防ぐ） | 明示的に選択した場合のみ。同じ期で整列している系列に限定 |
 | 現在庫 | 系列ごとに任意で設定可能 | SKU編集画面で個別に設定 |
 | シミュレーション | 4,000回、平均・SD・P50/P90/P95/P99・安全在庫・発注点・欠品確率・直近z値 | 各SKUを4,000回実行、一覧比較 |
-| レポート | 最大2系列の**CSV**とテキスト（TXT） | 全登録系列の比較**CSV**、選択した系列の結果テキスト |
-| 制限 | 2系列 | 試作版では最大200 SKU、ブラウザ保存容量に依存 |
-| 認証 | 不要 | Stripe**テスト契約**の検証が必要 |
+| レポート | 最大2系列の簡易**CSV** | 全登録系列の比較**CSV**、全体サマリー＋SKU別詳細＋分布図＋注意事項の**PDF** |
+| 制限 | 2系列 | 最大200 SKU、ブラウザ保存容量に依存 |
+| 認証 | 不要 | TESTではStripe契約確認。本番はGoogle会員ID＋Stripe Subscriptionを使用 |
 | データ保存 | 画面内のみ | ブラウザの`localStorage`のみ。クラウド同期・自動バックアップなし |
 
 **注意：アップロードされたExcel自体を再配布する機能ではありません。出力するのは分析結果CSV/TXTです。** CSVはExcelで開けます。旧形式`.xls`は未対応です。Excel内の数式は実行せず、ファイルに保存されている計算済み値のみ読みます。

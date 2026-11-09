@@ -1,5 +1,6 @@
-import {json,configurationDiagnostics} from '../../server/stripe.js';
+import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId} from '../../server/stripe.js';
 import {authConfigured} from '../../server/auth.js';
+import {DEFAULT_DISCLOSURE_REQUEST_URL} from '../../server/legal.js';
 
 export async function onRequestGet({env}){
  let d1SchemaOk=false,d1Error=null,webhookBacklog=null,webhookLastError=null,webhookLastEventType=null;
@@ -14,17 +15,50 @@ export async function onRequestGet({env}){
    webhookLastEventType=typeof last?.event_type==='string'?last.event_type:null;
   }
  }catch(e){d1Error=String(e?.message||e).slice(0,160)}}
- const stripeIssues=configurationDiagnostics(env);
+
+ const mode=billingMode(env),stripeIssues=configurationDiagnostics(env),priceId=activePriceId(env);
+ const disclosureUrl=(typeof env.LEGAL_DISCLOSURE_URL==='string'&&env.LEGAL_DISCLOSURE_URL.trim())||DEFAULT_DISCLOSURE_REQUEST_URL;
+ const explicitOperator=!!env.LEGAL_OPERATOR_NAME&&!!env.LEGAL_ADDRESS&&!!env.LEGAL_PHONE;
+ const disclosureOnRequest=typeof disclosureUrl==='string'&&/^https:\/\//.test(disclosureUrl);
  const legal={
-  operator_name:!!env.LEGAL_OPERATOR_NAME,
-  address:!!env.LEGAL_ADDRESS,
-  phone:!!env.LEGAL_PHONE,
-  support_email:!!env.SUPPORT_EMAIL
+  explicit_operator_details:explicitOperator,
+  disclosure_on_request:disclosureOnRequest,
+  disclosure_url:disclosureOnRequest?disclosureUrl:null,
+  refund_policy_confirmed:env.REFUND_POLICY_CONFIRMED==='true',
+  support_channel:!!env.SUPPORT_EMAIL||!!env.SUPPORT_URL||disclosureOnRequest
  };
  const auth={google_client_id:!!env.GOOGLE_CLIENT_ID,google_client_secret:!!env.GOOGLE_CLIENT_SECRET,configured:authConfigured(env),required:env?.AUTH_REQUIRED==='true'};
- const billing={stripe_test_configured:stripeIssues.length===0,webhook_secret:typeof env.STRIPE_WEBHOOK_SECRET==='string'&&env.STRIPE_WEBHOOK_SECRET.startsWith('whsec_'),d1_binding:!!env.DB,d1_schema_ok:d1SchemaOk,d1_error:d1Error,webhook_backlog:webhookBacklog,webhook_last_event_type:webhookLastEventType,webhook_last_error:webhookLastError,live_billing_enabled:false};
- const readyForBillingTest=billing.stripe_test_configured&&billing.webhook_secret&&billing.d1_binding&&billing.d1_schema_ok;
+ const testWebhook=typeof (env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET)==='string'&&(env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET).startsWith('whsec_');
+ const liveWebhook=typeof env.STRIPE_LIVE_WEBHOOK_SECRET==='string'&&env.STRIPE_LIVE_WEBHOOK_SECRET.startsWith('whsec_');
+ let account={checked:false,charges_enabled:null,payouts_enabled:null,details_submitted:null,error:null};
+ if(mode==='live'&&stripeIssues.length===0){try{
+   const a=await stripe(env,'/account');
+   account={checked:true,charges_enabled:a.charges_enabled===true,payouts_enabled:a.payouts_enabled===true,details_submitted:a.details_submitted===true,error:null};
+ }catch(e){account.error=e instanceof StripeApiError?(e.code||e.message):String(e?.message||e).slice(0,160)}}
+ const billing={
+  mode,
+  stripe_configured:stripeIssues.length===0,
+  configured_price_id:priceId||null,
+  test_webhook_secret:testWebhook,
+  live_webhook_secret:liveWebhook,
+  d1_binding:!!env.DB,
+  d1_schema_ok:d1SchemaOk,
+  d1_error:d1Error,
+  webhook_backlog:webhookBacklog,
+  webhook_last_event_type:webhookLastEventType,
+  webhook_last_error:webhookLastError,
+  live_billing_enabled:mode==='live',
+  account
+ };
+ const readyForBillingTest=mode==='test'&&billing.stripe_configured&&testWebhook&&billing.d1_binding&&billing.d1_schema_ok;
  const readyForUnattendedTest=readyForBillingTest&&auth.configured;
- const readyForLive=false;
- return json({environment:'test',ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,auth,legal,notes:['Live billing remains intentionally disabled.','Legal operator details and authenticated member mapping are required before live sales.']});
+ const legalReady=(legal.explicit_operator_details||legal.disclosure_on_request)&&legal.refund_policy_confirmed&&legal.support_channel;
+ const readyForLive=mode==='live'&&billing.stripe_configured&&liveWebhook&&billing.d1_binding&&billing.d1_schema_ok&&webhookBacklog===0&&auth.configured&&auth.required&&legalReady&&account.charges_enabled===true&&account.payouts_enabled===true&&account.details_submitted===true;
+ const notes=[];
+ if(mode!=='live')notes.push('Live billing is still gated off.');
+ if(!priceId&&mode==='live')notes.push('A live recurring Stripe Price ID is required.');
+ if(!auth.configured||!auth.required)notes.push('Authenticated member mapping is required for cross-device paid access.');
+ if(!legal.refund_policy_confirmed)notes.push('Refund policy must be explicitly confirmed before live sales.');
+ if(mode==='live'&&account.checked&&account.payouts_enabled!==true)notes.push('Stripe payouts must be enabled before live launch.');
+ return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,auth,legal,notes});
 }

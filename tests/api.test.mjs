@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState,TEST_MONTHLY_JPY,configurationMissing} from '../server/stripe.js';
+import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState,TEST_MONTHLY_JPY,configurationMissing,billingMode,activePriceId,expectedLivemode} from '../server/stripe.js';
 import {onRequestPost as checkout} from '../functions/api/checkout.js';
 import {onRequestPost as activate} from '../functions/api/activate.js';
 import {onRequestGet as verify} from '../functions/api/entitlement.js';
@@ -11,7 +11,7 @@ const env={STRIPE_SECRET_KEY:'sk_test_mock_only_123',STRIPE_PRO_PRICE_ID:'price_
 function request(path,origin='http://localhost:8788',body=null,headers={}){return new Request('http://localhost:8788'+path,{method:body===null?'GET':'POST',headers:{Origin:origin,'Content-Type':'application/json',...headers},body:body===null?undefined:JSON.stringify(body)})}
 const sess={livemode:false,mode:'subscription',status:'complete',payment_status:'paid',metadata:{app:'demand-scope-pro'},subscription:'sub_test123',customer:'cus_test123'};
 const sub={livemode:false,status:'active',metadata:{app:'demand-scope-pro'},customer:'cus_test123',items:{data:[{price:{id:'price_valid'}}]}};
-test('test-mode-only config',()=>{assert.ok(isConfigured(env));assert.ok(!isConfigured({...env,STRIPE_SECRET_KEY:'sk_live_forbidden'}));assert.ok(!isConfigured({...env,SESSION_SECRET:'short'}))});
+test('billing defaults to TEST and LIVE requires an explicit gate, live key and live Price',()=>{assert.equal(billingMode(env),'test');assert.ok(isConfigured(env));assert.ok(!isConfigured({...env,STRIPE_SECRET_KEY:'sk_live_forbidden'}));assert.ok(!isConfigured({...env,SESSION_SECRET:'short'}));const live={LIVE_BILLING_ENABLED:'true',STRIPE_LIVE_SECRET_KEY:'sk_live_mock_123',STRIPE_LIVE_PRO_PRICE_ID:'price_live123',SESSION_SECRET:'L'.repeat(48),APP_ORIGIN:'https://example.com'};assert.equal(billingMode(live),'live');assert.equal(expectedLivemode(live),true);assert.equal(activePriceId(live),'price_live123');assert.ok(isConfigured(live));assert.ok(!isConfigured({...live,STRIPE_LIVE_PRO_PRICE_ID:''}));assert.ok(!isConfigured({...live,STRIPE_LIVE_SECRET_KEY:'sk_test_wrong'}))});
 test('reject wrong origin before Stripe',async()=>{const res=await checkout({request:request('/api/checkout','https://evil.test',{}),env});assert.equal(res.status,403)});
 test('same-origin checkout is not blocked by a stale APP_ORIGIN override',async()=>{
  const old=globalThis.fetch;let posted;
@@ -129,18 +129,24 @@ test('public portal email-login redirect is pinned to Stripe TEST hosted login',
  assert.equal(bad.status,503);
 });
 
+test('live portal login is separate and rejects TEST login URLs',async()=>{
+ const live={LIVE_BILLING_ENABLED:'true',STRIPE_LIVE_PORTAL_LOGIN_URL:'https://billing.stripe.com/p/login/live_demo123'};
+ assert.equal(portalLoginUrl(live),'https://billing.stripe.com/p/login/live_demo123');
+ assert.equal(portalLoginUrl({...live,STRIPE_LIVE_PORTAL_LOGIN_URL:DEFAULT_TEST_PORTAL_LOGIN}),null);
+ const missing=await portalLogin({env:{LIVE_BILLING_ENABLED:'true'}});assert.equal(missing.status,503);
+});
 
-test('restricted test API key is allowed; restricted live API key is rejected',async()=>{
+
+test('restricted Stripe keys are mode-scoped and LIVE Checkout requires the configured live Price',async()=>{
  const restricted={...env,STRIPE_SECRET_KEY:'rk_test_sample_restricted_123'};
- assert.equal(isConfigured(restricted),true);
- assert.equal(isConfigured({...restricted,STRIPE_SECRET_KEY:'rk_live_never_allowed_123'}),false);
- assert.equal(configurationMissing(restricted).length,0);
- const old=globalThis.fetch;let seenHeader='';
+ assert.equal(isConfigured(restricted),true);assert.equal(configurationMissing(restricted).length,0);
+ const live={LIVE_BILLING_ENABLED:'true',STRIPE_LIVE_SECRET_KEY:'rk_live_sample_restricted_123',STRIPE_LIVE_PRO_PRICE_ID:'price_live123',SESSION_SECRET:'L'.repeat(48),APP_ORIGIN:'http://localhost:8788'};
+ assert.equal(isConfigured(live),true);
+ const old=globalThis.fetch;let seenHeader='',form;
  try {
-   globalThis.fetch=async (_url,opts)=>{seenHeader=opts.headers.Authorization;return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};
-   const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:restricted});
-   assert.equal(res.status,200);
-   assert.equal(seenHeader,'Bearer rk_test_sample_restricted_123');
+   globalThis.fetch=async (_url,opts)=>{seenHeader=opts.headers.Authorization;form=new URLSearchParams(opts.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};
+   let res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:restricted});assert.equal(res.status,200);assert.equal(seenHeader,'Bearer rk_test_sample_restricted_123');
+   res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:live});assert.equal(res.status,200);assert.equal(seenHeader,'Bearer rk_live_sample_restricted_123');assert.equal(form.get('line_items[0][price]'),'price_live123');assert.equal(form.get('line_items[0][price_data][unit_amount]'),null);
  }finally{globalThis.fetch=old}
 });
 

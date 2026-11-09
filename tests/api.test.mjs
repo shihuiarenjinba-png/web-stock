@@ -247,7 +247,7 @@ test('authenticated member is attached to Stripe Checkout metadata and email',as
  const old=globalThis.fetch;let form;
  try{
   globalThis.fetch=async(_url,opt)=>{form=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/member'}))};
-  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'},{Cookie:cookie}),env:authEnv});
+  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'other-billing@example.com'},{Cookie:cookie}),env:authEnv});
   assert.equal(res.status,200);assert.equal(form.get('metadata[member_id]'),'member_12345678');assert.equal(form.get('subscription_data[metadata][member_id]'),'member_12345678');assert.equal(form.get('customer_email'),'buyer@example.com');
  }finally{globalThis.fetch=old}
 });

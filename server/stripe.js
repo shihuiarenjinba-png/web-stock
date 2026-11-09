@@ -1,21 +1,36 @@
 const enc=new TextEncoder();
 export function json(body,status=200,headers={}) {const h=new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});if(headers instanceof Headers){headers.forEach((value,key)=>h.append(key,value));}else for(const [key,value] of Object.entries(headers))h.append(key,value);return new Response(JSON.stringify(body),{status,headers:h})}
-// Stripe test-only pilot. APP_ORIGIN and Price ID are optional; when the Price ID
-// is absent, Checkout creates an inline recurring price for a JPY100 test plan.
-// Production/livemode keys (sk_live_ / rk_live_) are explicitly rejected.
-// Restricted rk_test_ keys require narrowly-scoped Stripe API permissions at Stripe.
-export const TEST_MONTHLY_JPY = 100;
+
+// Billing defaults to TEST. Live billing is enabled only when LIVE_BILLING_ENABLED=true
+// AND a dedicated live Stripe key + live recurring Price ID are configured.
+export const TEST_MONTHLY_JPY=100;
 function normalizedSecret(value){return typeof value==='string'?value.trim():''}
+function normalizedValue(value){return typeof value==='string'?value.trim():''}
+export function billingMode(env){return env?.LIVE_BILLING_ENABLED==='true'?'live':'test'}
+export function expectedLivemode(env){return billingMode(env)==='live'}
+export function activeStripeKey(env){
+ return billingMode(env)==='live'
+  ?normalizedSecret(env?.STRIPE_LIVE_SECRET_KEY)
+  :normalizedSecret(env?.STRIPE_TEST_SECRET_KEY||env?.STRIPE_SECRET_KEY);
+}
+export function activePriceId(env){
+ return billingMode(env)==='live'
+  ?normalizedValue(env?.STRIPE_LIVE_PRO_PRICE_ID)
+  :normalizedValue(env?.STRIPE_PRO_PRICE_ID);
+}
 export function configurationDiagnostics(env){
- const issues=[];
- const stripeKey=normalizedSecret(env?.STRIPE_SECRET_KEY);
- if(stripeKey.length===0)issues.push({name:'STRIPE_SECRET_KEY',reason:'missing'});
- else if(stripeKey.includes('STRIPE_SECRET_KEY='))issues.push({name:'STRIPE_SECRET_KEY',reason:'pasted_assignment'});
- else if(!(stripeKey.startsWith('sk_test_')||stripeKey.startsWith('rk_test_')))issues.push({name:'STRIPE_SECRET_KEY',reason:'test_key_format'});
+ const issues=[],mode=billingMode(env),keyName=mode==='live'?'STRIPE_LIVE_SECRET_KEY':'STRIPE_SECRET_KEY';
+ const stripeKey=activeStripeKey(env);
+ if(stripeKey.length===0)issues.push({name:keyName,reason:'missing'});
+ else if(stripeKey.includes('STRIPE_SECRET_KEY=')||stripeKey.includes('STRIPE_LIVE_SECRET_KEY=')||stripeKey.includes('STRIPE_TEST_SECRET_KEY='))issues.push({name:keyName,reason:'pasted_assignment'});
+ else if(mode==='live'&&!(stripeKey.startsWith('sk_live_')||stripeKey.startsWith('rk_live_')))issues.push({name:keyName,reason:'live_key_format'});
+ else if(mode==='test'&&!(stripeKey.startsWith('sk_test_')||stripeKey.startsWith('rk_test_')))issues.push({name:keyName,reason:'test_key_format'});
  const sessionSecret=normalizedSecret(env?.SESSION_SECRET);
  if(sessionSecret.length===0)issues.push({name:'SESSION_SECRET',reason:'missing'});
  else if(sessionSecret.length<32)issues.push({name:'SESSION_SECRET',reason:'too_short'});
- if(env?.STRIPE_PRO_PRICE_ID && !/^price_[A-Za-z0-9]+$/.test(env.STRIPE_PRO_PRICE_ID))issues.push({name:'STRIPE_PRO_PRICE_ID',reason:'invalid_format'});
+ const priceId=activePriceId(env),priceName=mode==='live'?'STRIPE_LIVE_PRO_PRICE_ID':'STRIPE_PRO_PRICE_ID';
+ if(mode==='live'&&!priceId)issues.push({name:priceName,reason:'missing'});
+ else if(priceId&&!/^price_[A-Za-z0-9]+$/.test(priceId))issues.push({name:priceName,reason:'invalid_format'});
  if(env?.APP_ORIGIN){try{const u=new URL(env.APP_ORIGIN);if(u.origin!==env.APP_ORIGIN||!(u.protocol==='https:'||(u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname))))issues.push({name:'APP_ORIGIN',reason:'invalid_origin'});}catch{issues.push({name:'APP_ORIGIN',reason:'invalid_origin'})}}
  return issues;
 }
@@ -28,9 +43,6 @@ function trustedRequestOrigin(request){
  return value.origin;
 }
 export function origin(env,request){
- // For an incoming Pages request, the URL Cloudflare is actually serving is the
- // safest source for success/cancel callbacks. APP_ORIGIN remains a fallback for
- // call sites without a Request object and is still validated by configurationDiagnostics().
  if(request)return trustedRequestOrigin(request);
  if(env?.APP_ORIGIN)return new URL(env.APP_ORIGIN).origin;
  throw new Error('Request required when APP_ORIGIN is not configured');
@@ -40,8 +52,6 @@ export function validOrigin(request,env){
   const target=trustedRequestOrigin(request);
   const h=request.headers.get('Origin');
   if(h)return new URL(h).origin===target;
-  // Some browser/privacy environments omit Origin on same-origin POSTs. Accept a
-  // same-origin Referer fallback, but never accept a request with neither signal.
   const ref=request.headers.get('Referer');
   return !!ref&&new URL(ref).origin===target;
  }catch{return false}
@@ -50,8 +60,8 @@ export class StripeApiError extends Error {
  constructor(message,{status=502,type=null,code=null,requestId=null,param=null}={}){super(message);this.name='StripeApiError';this.status=status;this.type=type;this.code=code;this.requestId=requestId;this.param=param}
 }
 export async function stripe(env,path,form){
- if(!isConfigured(env))throw new Error('Stripe test configuration is not complete');
- const opts={method:form?'POST':'GET',headers:{'Authorization':`Bearer ${normalizedSecret(env.STRIPE_SECRET_KEY)}`,'Stripe-Version':'2025-09-30.clover'}};
+ if(!isConfigured(env))throw new Error('Stripe billing configuration is not complete');
+ const opts={method:form?'POST':'GET',headers:{'Authorization':`Bearer ${activeStripeKey(env)}`,'Stripe-Version':'2025-09-30.clover'}};
  if(form){opts.headers['Content-Type']='application/x-www-form-urlencoded';opts.body=new URLSearchParams(form)}
  const res=await fetch(`https://api.stripe.com/v1${path}`,opts);
  let data={};try{data=await res.json()}catch{}
@@ -65,9 +75,7 @@ const b64url=bytes=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').repla
 const unb64url=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)),c=>c.charCodeAt(0));
 async function signature(content,secret){const key=await crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);return b64url(new Uint8Array(await crypto.subtle.sign('HMAC',key,enc.encode(content))))}
 export function safeEqual(a,b){if(a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);return diff===0}
-// Bind the browser that starts Checkout to the subsequent activation.
-// Session IDs returned in URLs are NOT login credentials by themselves.
-export async function checkoutBrowserState(env, secure=true){
+export async function checkoutBrowserState(env,secure=true){
  const bytes=crypto.getRandomValues(new Uint8Array(32));
  const token=b64url(bytes);
  const reference=await signature(`checkout:${token}`,normalizedSecret(env.SESSION_SECRET));
@@ -80,18 +88,24 @@ export async function validCheckoutBrowser(request,env,session){
  const reference=await signature(`checkout:${raw}`,normalizedSecret(env.SESSION_SECRET));
  return safeEqual(reference,session.client_reference_id);
 }
-export async function issueCookie(subscription,customer,env,secure=true){const payload=b64url(enc.encode(JSON.stringify({v:1,sub:subscription,customer,exp:Math.floor(Date.now()/1000)+14*86400})));const sig=await signature(payload,normalizedSecret(env.SESSION_SECRET));return `demand_pro=${payload}.${sig}; Path=/; Max-Age=${14*86400}; HttpOnly; SameSite=Lax${secure?'; Secure':''}`}
+export async function issueCookie(subscription,customer,env,secure=true){const payload=b64url(enc.encode(JSON.stringify({v:1,sub:subscription,customer,live:expectedLivemode(env),exp:Math.floor(Date.now()/1000)+14*86400})));const sig=await signature(payload,normalizedSecret(env.SESSION_SECRET));return `demand_pro=${payload}.${sig}; Path=/; Max-Age=${14*86400}; HttpOnly; SameSite=Lax${secure?'; Secure':''}`}
 export function clearCookie(secure=true){return `demand_pro=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure?'; Secure':''}`}
-async function readCookie(request,env){const m=request.headers.get('Cookie')?.match(/(?:^|;\s*)demand_pro=([^;]+)/);if(!m)return null;const [payload,sig]=m[1].split('.');if(!payload||!sig||payload.length>1024)return null;const target=await signature(payload,env.SESSION_SECRET);if(!safeEqual(target,sig))return null;try{const data=JSON.parse(new TextDecoder().decode(unb64url(payload)));if(data.v!==1||data.exp<=Date.now()/1000||!/^sub_[A-Za-z0-9]+$/.test(data.sub)||!/^cus_[A-Za-z0-9]+$/.test(data.customer))return null;return data}catch{return null}}
+async function readCookie(request,env){
+ const m=request.headers.get('Cookie')?.match(/(?:^|;\s*)demand_pro=([^;]+)/);if(!m)return null;
+ const [payload,sig]=m[1].split('.');if(!payload||!sig||payload.length>1024)return null;
+ const target=await signature(payload,normalizedSecret(env.SESSION_SECRET));if(!safeEqual(target,sig))return null;
+ try{const data=JSON.parse(new TextDecoder().decode(unb64url(payload)));if(data.v!==1||data.exp<=Date.now()/1000||data.live!==expectedLivemode(env)||!/^sub_[A-Za-z0-9]+$/.test(data.sub)||!/^cus_[A-Za-z0-9]+$/.test(data.customer))return null;return data}catch{return null}
+}
 export async function verifiedSubscription(env,id,customer=null){
  if(!/^sub_[A-Za-z0-9]+$/.test(id))return null;
  const data=await stripe(env,`/subscriptions/${encodeURIComponent(id)}`);
- if(data.livemode!==false||!['active','trialing'].includes(data.status)||data.metadata?.app!=='demand-scope-pro')return null;
+ if(data.livemode!==expectedLivemode(env)||!['active','trialing'].includes(data.status)||data.metadata?.app!=='demand-scope-pro')return null;
  if(customer&&data.customer!==customer)return null;
+ const priceId=activePriceId(env);
  const priced=(data.items?.data||[]).some(item=>{
   const price=item.price||{};
-  if(env.STRIPE_PRO_PRICE_ID)return price.id===env.STRIPE_PRO_PRICE_ID;
-  return price.currency==='jpy'&&price.unit_amount===TEST_MONTHLY_JPY&&price.recurring?.interval==='month';
+  if(priceId)return price.id===priceId;
+  return billingMode(env)==='test'&&price.currency==='jpy'&&price.unit_amount===TEST_MONTHLY_JPY&&price.recurring?.interval==='month';
  });
  return priced?data:null;
 }

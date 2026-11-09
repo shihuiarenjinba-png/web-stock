@@ -4,12 +4,21 @@ import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './imp
 import {initI18n,lang,t,errorMessage} from './i18n.js';
 import {printRiskReport} from './pdf-report.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
-let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null;
+let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null,memberState={configured:false,authenticated:false,required:false};
 const KEY='demandscope_pro_skus_v1';
 function warn(msg){$('proAlert').textContent=errorMessage(msg instanceof Error?msg:new Error(msg));$('proAlert').classList.remove('hidden')}
 function clearWarn(){$('proAlert').classList.add('hidden')}
 function toast(v){$('toast').textContent=v;$('toast').classList.remove('hidden');setTimeout(()=>$('toast').classList.add('hidden'),2600)}
 async function call(path,body){const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body??{})});let data={};try{data=await res.json()}catch{}if(!res.ok){const parts=[data.error,data.detail,data.hint,data.request_id?('Request ID: '+data.request_id):null].filter(Boolean);throw new Error(parts.join(' / ')||'通信に失敗しました')}return data}
+async function checkMemberAuth(){
+ try{
+  const res=await fetch('/api/auth/me',{cache:'no-store'});memberState=await res.json();
+  const box=$('memberAuth');if(!memberState.configured){box.classList.add('hidden');return memberState}
+  box.classList.remove('hidden');$('memberAuthTitle').textContent=memberState.authenticated?(lang()==='en'?'Member signed in':'会員ログイン済み'):(lang()==='en'?'Member sign-in':'会員認証');
+  $('memberAuthText').textContent=memberState.authenticated?(memberState.member?.email|| (lang()==='en'?'Authenticated Google member':'Google会員として認証済み')):(memberState.required?(lang()==='en'?'Google sign-in is required before Checkout.':'Checkout前にGoogleログインが必要です。'):(lang()==='en'?'Google sign-in is available for account-linked access.':'アカウント連携用のGoogleログインを利用できます。'));
+  $('googleLogin').classList.toggle('hidden',memberState.authenticated);$('memberLogout').classList.toggle('hidden',!memberState.authenticated);return memberState
+ }catch{memberState={configured:false,authenticated:false,required:false};$('memberAuth')?.classList.add('hidden');return memberState}
+}
 async function checkStripeHealth(){
  try{
   const res=await fetch('/api/stripe-status',{cache:'no-store'});
@@ -32,16 +41,19 @@ async function checkStripeHealth(){
   el.className='stripe-health bad';
  }catch(e){const el=$('stripeHealth');el.textContent=lang()==='en'?'Stripe connection check failed.':'Stripe接続確認に失敗しました。';el.className='stripe-health bad'}
 }
-async function boot(){try{await checkStripeHealth();const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(lang()==='en'?'Test checkout verified':'テスト決済を確認しました');}
+async function boot(){try{await checkMemberAuth();await checkStripeHealth();const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(lang()==='en'?'Test checkout verified':'テスト決済を確認しました');}
  if(params.get('checkout')==='cancelled'){history.replaceState({},'',location.pathname);warn('決済はキャンセルされました。');}
+ if(params.get('auth')==='failed'){history.replaceState({},'',location.pathname);warn(lang()==='en'?'Google sign-in failed.':'Googleログインに失敗しました。');}
+ if(params.get('auth')==='ok'){history.replaceState({},'',location.pathname);await checkMemberAuth();toast(lang()==='en'?'Google sign-in completed':'Googleログインを確認しました');}
  const res=await fetch('/api/entitlement',{cache:'no-store'});
  if(!res.ok){access(false,true);warn(lang()==='en'?'Pro requires deployment of Cloudflare Pages Functions and Stripe test configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripeテスト設定のデプロイが必要です。');return;}
  const state=await res.json();access(!!state.active,state.configured===false);if(state.configured===false&&state.missing?.length)warn((lang()==='en'?'Setup needed: ':'設定が必要です: ')+state.missing.join(', '));if(state.error)warn(state.error);
  }catch(e){access(false,false);warn(e.message)} }
-function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました'):t('🔒 Stripe テスト決済で利用開始');$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。');$('checkout').disabled=unconfigured;if(unconfigured)$('accessText').textContent=lang()==='en'?'Configure the Stripe TEST secret key and session secret on Cloudflare Pages.':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。';if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
+function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました'):t('🔒 Stripe テスト決済で利用開始');$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。');$('checkout').disabled=unconfigured||(memberState.required&&!memberState.authenticated);if(unconfigured)$('accessText').textContent=lang()==='en'?'Configure the Stripe TEST secret key and session secret on Cloudflare Pages.':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。';if(!unconfigured&&memberState.required&&!memberState.authenticated)$('accessText').textContent=lang()==='en'?'Sign in with Google before starting Checkout.':'決済前にGoogleログインしてください。';if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
 $('checkout').addEventListener('click',async()=>{
  clearWarn();$('checkoutError').classList.add('hidden');const button=$('checkout');const original=button.textContent;button.disabled=true;button.textContent=lang()==='en'?'Connecting to Stripe…':'Stripeに接続中…';
  try{
+  if(memberState.required&&!memberState.authenticated)throw new Error(lang()==='en'?'Google sign-in is required before Checkout.':'Checkout前にGoogleログインが必要です。');
   if(!$('legalConsent')?.checked)throw new Error(lang()==='en'?'Please accept the terms, privacy policy, and billing conditions before Checkout.':'決済前に利用規約・プライバシーポリシー・課金条件への同意が必要です。');
   const x=await call('/api/checkout',{accept_terms:true});
   if(!x.url)throw new Error(lang()==='en'?'Checkout URL was not returned.':'決済URLが返されませんでした。');location.assign(x.url)
@@ -49,7 +61,9 @@ $('checkout').addEventListener('click',async()=>{
  catch(e){const message=e.message||String(e);warn(message);$('checkoutError').textContent=message;$('checkoutError').classList.remove('hidden');await checkStripeHealth();button.disabled=false;button.textContent=original}
 });
 $('portal').addEventListener('click',async()=>{try{const x=await call('/api/portal');location.assign(x.url)}catch(e){warn(e.message)}});
-$('logout').addEventListener('click',async()=>{try{await call('/api/logout');access(false,false);toast('サインアウトしました')}catch(e){warn(e.message)}});
+async function memberSignOut(){try{await call('/api/auth/logout');memberState={...memberState,authenticated:false,member:null};await checkMemberAuth()}catch(e){warn(e.message)}}
+$('memberLogout').addEventListener('click',async()=>{await memberSignOut();access(false,false);toast(lang()==='en'?'Signed out':'会員ログアウトしました')});
+$('logout').addEventListener('click',async()=>{try{await call('/api/logout');if(memberState.configured)await memberSignOut();access(false,false);toast('サインアウトしました')}catch(e){warn(e.message)}});
 $('addToggle').addEventListener('click',()=>showEditor());$('cancelEdit').addEventListener('click',()=>{$('skuForm').classList.add('hidden');editing=null});
 function showEditor(sku=null){editing=sku?.id??null;$('skuForm').reset();$('skuName').value=sku?.name||'';$('skuLead').value=sku?.lead??7;$('skuStock').value=sku?.stock??'';$('skuService').value=sku?.service??95;$('skuMethod').value=sku?.method||'sma';$('skuWindow').value=sku?.window??7;$('skuData').value=sku?.data||'';$('saveSku').textContent=editing?(lang()==='en'?'Save changes':'変更を保存'):t('商品を保存');$('skuForm').classList.remove('hidden');$('skuName').focus()}
 function analyzeSku(s){return analyze({demand:parseDemand(s.data),leadTime:s.lead,service:s.service,inventory:s.stock,method:s.method,window:s.window})}

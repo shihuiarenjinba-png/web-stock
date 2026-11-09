@@ -92,3 +92,6 @@
 .subscription-summary{display:grid;gap:4px;margin:12px 0;padding:12px;border:1px solid #35536d;background:#0f2133;border-radius:10px;color:#aebfd0;font-size:11px;line-height:1.5}.subscription-summary strong{color:#e7f2ff;font-size:12px}.subscription-summary a{color:#75e2d4}
 
 .legal-consent{display:flex;gap:9px;align-items:flex-start;margin:12px 0;color:#aebfd0;font-size:11px;line-height:1.55}.legal-consent input{margin-top:3px;flex:0 0 auto}.legal-consent a{color:#75e2d4}
+
+.member-auth{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:12px 0;padding:12px;border:1px solid #314b63;background:#0d1b2b;border-radius:10px}.member-auth>div:first-child{display:grid;gap:3px}.member-auth strong{font-size:12px;color:#e5f1ff}.member-auth span{font-size:11px;color:#9fb2c5}.member-auth-actions{display:flex;gap:7px;flex-wrap:wrap}.member-auth a{text-decoration:none}
+@media(max-width:620px){.member-auth{align-items:flex-start;flex-direction:column}.member-auth-actions,.member-auth-actions .btn{width:100%}}

@@ -74,7 +74,8 @@ export function printRiskReport({results,language='ja'}){
  const summary=section(t.summary,'pdf-summary');summary.append(tableFor([t.product,t.reorder,t.safety,t.risk,t.warnings],model.map(x=>x.summary),'pdf-summary-table'));root.append(summary);
  model.forEach((item,i)=>{
   const s=section(t.details+' '+(i+1)+' / '+model.length+' · '+item.name,'pdf-detail');s.classList.add('pdf-newpage');
-  const paired=[];for(let j=0;j<item.details.length;j+=2){const a=item.details[j],b=item.details[j+1]||['',''];paired.push([a[0],a[1],b[0],b[1]])}\n  s.append(tableFor([t.metric,t.value,t.metric,t.value],paired,'pdf-detail-table'));
+  const paired=[];for(let j=0;j<item.details.length;j+=2){const a=item.details[j],b=item.details[j+1]||['',''];paired.push([a[0],a[1],b[0],b[1]])}
+  s.append(tableFor([t.metric,t.value,t.metric,t.value],paired,'pdf-detail-table'));
   const chartTitle=cell('h3',t.distribution);chartTitle.className='pdf-chart-title';s.append(chartTitle,distributionSvg(item.sums,language));
   const warnTitle=cell('h3',t.warnings);warnTitle.className='pdf-chart-title';s.append(warnTitle);
   if(item.flags.length){const ul=document.createElement('ul');ul.className='pdf-flags';item.flags.forEach(v=>ul.append(cell('li',v)));s.append(ul)}else{s.append(cell('p',t.none))}

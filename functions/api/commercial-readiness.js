@@ -1,4 +1,4 @@
-import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId} from '../../server/stripe.js';
+import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId,verifyLivePrice,LIVE_MONTHLY_JPY} from '../../server/stripe.js';
 import {authConfigured} from '../../server/auth.js';
 import {DEFAULT_DISCLOSURE_REQUEST_URL} from '../../server/legal.js';
 
@@ -31,10 +31,12 @@ export async function onRequestGet({env}){
  const testWebhook=typeof (env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET)==='string'&&(env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET).startsWith('whsec_');
  const liveWebhook=typeof env.STRIPE_LIVE_WEBHOOK_SECRET==='string'&&env.STRIPE_LIVE_WEBHOOK_SECRET.startsWith('whsec_');
  let account={checked:false,charges_enabled:null,payouts_enabled:null,details_submitted:null,error:null};
+ let livePrice={checked:false,verified:false,reason:null,expected_jpy:LIVE_MONTHLY_JPY};
  if(mode==='live'&&stripeIssues.length===0){try{
-   const a=await stripe(env,'/account');
+   const [a,p]=await Promise.all([stripe(env,'/account'),verifyLivePrice(env)]);
    account={checked:true,charges_enabled:a.charges_enabled===true,payouts_enabled:a.payouts_enabled===true,details_submitted:a.details_submitted===true,error:null};
- }catch(e){account.error=e instanceof StripeApiError?(e.code||e.message):String(e?.message||e).slice(0,160)}}
+   livePrice={checked:true,verified:p.ok===true,reason:p.reason||null,expected_jpy:LIVE_MONTHLY_JPY};
+ }catch(e){account.error=e instanceof StripeApiError?(e.code||e.message):String(e?.message||e).slice(0,160);livePrice={checked:true,verified:false,reason:'stripe_error',expected_jpy:LIVE_MONTHLY_JPY}}}
  const billing={
   mode,
   stripe_configured:stripeIssues.length===0,
@@ -48,15 +50,17 @@ export async function onRequestGet({env}){
   webhook_last_event_type:webhookLastEventType,
   webhook_last_error:webhookLastError,
   live_billing_enabled:mode==='live',
-  account
+  account,
+  live_price:livePrice
  };
  const readyForBillingTest=mode==='test'&&billing.stripe_configured&&testWebhook&&billing.d1_binding&&billing.d1_schema_ok;
  const readyForUnattendedTest=readyForBillingTest&&auth.configured;
  const legalReady=(legal.explicit_operator_details||legal.disclosure_on_request)&&legal.refund_policy_confirmed&&legal.support_channel;
- const readyForLive=mode==='live'&&billing.stripe_configured&&liveWebhook&&billing.d1_binding&&billing.d1_schema_ok&&webhookBacklog===0&&auth.configured&&auth.required&&legalReady&&account.charges_enabled===true&&account.payouts_enabled===true&&account.details_submitted===true;
+ const readyForLive=mode==='live'&&billing.stripe_configured&&liveWebhook&&billing.d1_binding&&billing.d1_schema_ok&&webhookBacklog===0&&auth.configured&&auth.required&&legalReady&&livePrice.verified===true&&account.charges_enabled===true&&account.payouts_enabled===true&&account.details_submitted===true;
  const notes=[];
  if(mode!=='live')notes.push('Live billing is still gated off.');
  if(!priceId&&mode==='live')notes.push('A live recurring Stripe Price ID is required.');
+ if(mode==='live'&&livePrice.checked&&!livePrice.verified)notes.push('Live Price must be an active DemandScope Pro JPY 980 monthly price.');
  if(!auth.configured||!auth.required)notes.push('Authenticated member mapping is required for cross-device paid access.');
  if(!legal.refund_policy_confirmed)notes.push('Refund policy must be explicitly confirmed before live sales.');
  if(mode==='live'&&account.checked&&account.payouts_enabled!==true)notes.push('Stripe payouts must be enabled before live launch.');

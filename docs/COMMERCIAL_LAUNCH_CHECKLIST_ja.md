@@ -1,111 +1,174 @@
-# DemandScope 商用・据え置き運用チェックリスト
+# DemandScope 商用公開チェックリスト
 
-更新: 2026-11-08
+更新: 2026-11-09
 
-## 目的
+## 現在の販売設計
 
-DemandScopeを、運営者が日常的に手作業しなくても「申込 → 月額課金 → 契約状態同期 → Pro権限 → 契約管理/解約」が継続するSaaSとして運用するための残件です。
+- Free: 0円
+- Pro: **月額980円**
+- 課金周期: 月額自動更新
+- 解約: Stripe Customer Portalから行い、原則として契約期間末で終了
+- 決済: Stripe Checkout
+- 契約管理: Stripe Customer Portal
+- 分析データ: 原則ブラウザ内処理。需要ファイル自体を決済サーバーへ送らない
+- Live課金: **まだOFF**。 `LIVE_BILLING_ENABLED=true` が最終スイッチ
 
-## 現在できていること
+## 完了済み
 
-- Cloudflare Pages + GitHub自動デプロイ
-- Free / Pro分離
-- Stripe TEST Checkout / Customer Portal
-- サーバー側でのStripe契約再照合
-- HttpOnly署名Cookie
-- Stripe Webhook署名検証
-- 法務ページ（利用規約 / プライバシー / 特商法表記 / 課金・解約）
-- Pro申込画面の月額・自動更新・解約表示
-- Publicはindex、Proはnoindex
-- D1用スキーマとWebhook契約同期コード
+### アプリ / Cloudflare
 
-## 本番課金を有効にする前の必須事項
+- GitHub main → Cloudflare Pages Production自動デプロイ
+- D1 Production binding `DB`
+- D1 schema: members / subscriptions / stripe_events / checkout_acceptances 等
+- Webhookの冪等保存
+- Webhook backlog監視
+- TEST/LIVEイベントの署名シークレット分離
+- TEST/LIVE subscriptionのlivemode分離
+- Free / Pro機能境界
+- PDF / CSVレポート
+- 日本語 / 英語
+- XLSX / CSV / TSV / TXT読込
+- 4,000回Monte Carlo
+- 直近ボラティリティを長期で薄めない保守推定
+- GitHub Actions + Cloudflare build gate
 
-### 1. Cloudflare D1
+### Stripe TEST
 
-1. web-stock専用D1データベースを作成
-2. migrations/0001_commercial_core.sql を適用
-3. Pages FunctionsのProduction Bindingで変数名 DB としてD1を接続
-4. Previewにも別DBを推奨（Production DBをPreviewから触らせない）
+- TEST Checkout E2E
+- Customer作成
+- Subscription作成
+- Pro権限反映
+- Customer Portal
+- cancel-at-period-end
+- Webhook persistence
+- 別購入者メールのCheckout引継ぎ
 
-WebhookはDBが無い場合に 503 を返します。Stripeに成功応答を返してイベントを捨てる設計にはしていません。
+### Stripe LIVE準備
 
-### 2. Stripe Webhook
+- Live Customer Portal:
+  `bpc_1UZqUZBGa8rL8jwIrmBsxuO0`
+- Live Portal login:
+  `https://billing.stripe.com/p/login/7sYaEW1Q36DN9Km1GN93y00`
+- Live Webhook:
+  `we_1UZqVxBGa8rL8jwIWuHw7CVK`
+- Live Webhook URL:
+  `https://web-stock-78r.pages.dev/api/stripe-webhook`
+- Live決済は専用Live key / Price / Portal / Webhookを使用
+- TESTとLIVEをコードで混在させない
+- Live PriceはCheckout前に次をサーバーで再照合:
+  - livemode=true
+  - active=true
+  - JPY
+  - **980円**
+  - month / interval_count=1
+  - Product metadata: `app=demand-scope-pro`, `tier=pro`
 
-Stripe TESTエンドポイント:
-https://web-stock-78r.pages.dev/api/stripe-webhook
+## 本番公開を止めている残件
 
-最低限監視するイベント:
-- checkout.session.completed
-- customer.subscription.created
-- customer.subscription.updated
-- customer.subscription.deleted
+### 1. Stripe本人確認
 
-Stripe TEST Webhook endpoint は作成済み: we_1UZXulBGa8rL8jwIJQf0McF8\n\nWebhook Signing Secret whsec_... をCloudflare Production Secret STRIPE_WEBHOOK_SECRET に登録。Secret値はGitHub・チャットへ保存しない。
+Stripe accountは決済受付自体は可能だが、現時点では本人確認書類の要件により payout が停止している。
 
-### 3. 購入者本人認証
+本番公開前にStripe Dashboardで本人確認書類を完了し、
 
-本番ではブラウザCookieだけを会員IDにしない。
+- charges_enabled=true
+- payouts_enabled=true
+- details_submitted=true
 
-推奨:
-- Google OIDC
+をすべて満たすこと。
+
+### 2. DemandScope専用Live Product / Price
+
+作成予定:
+
+- Product: DemandScope Pro
+- metadata:
+  - app=demand-scope-pro
+  - tier=pro
+- Price:
+  - JPY 980
+  - recurring monthly
+
+既存NamiData Product/Priceを流用しない。
+
+### 3. Google会員認証
+
+別端末・Cookie削除後にもPro権限を復元するため、本番ではGoogle OIDCを必須にする。
+
+Cloudflare Production:
+
 - GOOGLE_CLIENT_ID
 - GOOGLE_CLIENT_SECRET
-- 認証済みGoogle subjectをD1 members に保存
-- Stripe Customer IDとmemberを1対1で紐付け
-- Pro権限 = 「認証済みmember」かつ「DB/Stripe上で有効なsubscription」
+- AUTH_REQUIRED=true
 
-現行コードはこのID紐付けの前段階です。本番販売では必須。
+D1 member ↔ Stripe Customer ↔ Subscription が一致することをE2Eで確認する。
 
-### 4. 法務情報
+### 4. Live Stripe Secrets / Variables
 
-/legal/commerce/ の以下を実情報へ置換してから本番販売:
-- 販売事業者名
-- 運営責任者
-- 所在地
-- 電話番号
-- サポートメール
-- 本番価格（税込）
-- 支払時期
-- 本番の返金条件
-- 解約時の効力発生日
+Cloudflare Productionに設定:
 
-本番販売前は「本番販売開始前に掲載」のままでもテストページとしては可。ただしLive Checkoutを有効化してはいけない。
+- STRIPE_LIVE_SECRET_KEY = Secret
+- STRIPE_LIVE_PRO_PRICE_ID = Variable
+- STRIPE_LIVE_PORTAL_CONFIG_ID = `bpc_1UZqUZBGa8rL8jwIrmBsxuO0`
+- STRIPE_LIVE_PORTAL_LOGIN_URL = Live Portal login URL
+- STRIPE_LIVE_WEBHOOK_SECRET = Secret
+- LIVE_BILLING_ENABLED = **最後までfalse**
 
-### 5. 本番価格・税
+Live Webhook signing secretはGitHub・ドキュメント・チャットへ保存しない。
 
-現在のJPY 100/月はTEST専用。
-本番Product/Priceを作る前に、消費税/Stripe Taxの扱いと税込・税別表示を決定する。
-既存NamiData Labの商品・価格は流用しない。
+### 5. 返金条件
 
-### 6. 決済最終確認
+`REFUND_POLICY_CONFIRMED=true` にする前に、課金・解約ページと特商法表記の内容を最終確定する。
 
-本番Checkout直前に明示:
-- 月額料金
-- 自動更新
-- 各回の請求時期
-- 提供開始時期
-- 解約方法
-- 解約の効力
+### 6. 法務表示
+
+現状は事業者情報の「請求により遅滞なく開示」導線をreadinessが認識する構成。
+
+公開前に少なくとも以下を画面上で一致させる:
+
+- 月額980円
+- 月額自動更新
+- 決済後に提供開始
+- Stripe Portalから解約
+- 解約の効力発生日
 - 返金条件
-- 利用規約 / 特商法表記へのリンク
+- 利用規約
+- プライバシー
+- 特商法表記
 
-### 7. 運用監視
+## 最終Live切替手順
 
-最低限:
-- Stripe Webhook失敗通知
-- Cloudflare Functions 5xx監視
-- 支払失敗 / subscription canceled の確認
-- D1バックアップ/復元手順
-- 月1回のTEST Checkout / Portal / cancel E2E
-- 利用規約・プライバシー・特商法ページのリンク切れ監視
+**順序を変えない。**
 
-## 現在の安全ゲート
+1. GitHub Actions PASS
+2. Cloudflare Production PASS
+3. PDF / CSV / XLSX実機QA PASS
+4. Stripe本人確認・payout PASS
+5. Live Product/Priceの980円検証 PASS
+6. Live Portal PASS
+7. Live Webhook Secret設定 PASS
+8. Google OAuth PASS
+9. member ↔ Customer ↔ Subscription E2E PASS
+10. 法務/返金表示 PASS
+11. `/api/commercial-readiness` の未達を解消
+12. 最後に `LIVE_BILLING_ENABLED=true`
+13. 少額の実カード本番Checkoutを1件実施
+14. Checkout → Pro権限 → Webhook → Portal → cancel を確認
+15. 問題なければ一般公開
 
-- Live Stripe key (sk_live_ / rk_live_) はコードで拒否
-- 本番販売価格は未設定
-- /api/commercial-readiness はLive readyを常にfalseとする
-- 法務事業者情報が未確定
-- Google会員認証未接続
+## SALE_READY条件
 
-したがって、現段階で実カード課金に切り替わることはありません。
+次を全部満たすまで `SALE_READY` としない。
+
+- GitHub Checks PASS
+- Cloudflare Pages PASS
+- `ready_for_live=true`
+- Live Price = JPY 980/month をサーバー再照合
+- Stripe payout可能
+- Google認証済みmemberで購入
+- 別端末でPro復旧
+- Webhook backlog=0
+- PDF/CSV出力正常
+- 解約導線正常
+- 法務表示と実際の課金条件が一致
+

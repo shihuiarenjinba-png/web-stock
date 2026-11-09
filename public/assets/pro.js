@@ -11,7 +11,7 @@ function applyBillingMode(){
  const live=liveBilling();
  const badge=$('billingModeBadge');if(badge)badge.textContent=live?'PRO PLAN · LIVE':'PRO PLAN · TEST MODE';
  const label=$('billingPlanLabel');if(label)label.textContent=live?'Pro 月額プラン':'テスト月額プラン';
- const price=$('billingPlanPrice');if(price)price.textContent=live?(lang()==='en'?'Live price is shown on Stripe Checkout before purchase.':'本番価格は購入確定前にStripe Checkoutで表示されます。'):'100円/月（Stripeテストモード・実請求なし）';
+ const price=$('billingPlanPrice');if(price)price.textContent=live?(lang()==='en'?'JPY 980 / month':'980円/月'):'100円/月（Stripeテストモード・実請求なし）';
  const renewal=$('billingPlanRenewal');if(renewal)renewal.textContent=live?(lang()==='en'?'Monthly auto-renewal. You can cancel from Stripe subscription management.':'月額自動更新。Stripe契約管理画面から解約できます。'):'月額自動更新の動作確認用。解約はStripe契約管理画面から行えます。';
  const checkout=$('checkout');if(checkout&&!checkout.disabled)checkout.textContent=live?(lang()==='en'?'Continue to payment':'決済へ進む'):(lang()==='en'?'Open test checkout':'テスト決済へ進む');
  const footer=$('billingFooterLabel');if(footer)footer.textContent=live?'DemandScope Pro':'DemandScope Pro — テスト開発版';
@@ -82,7 +82,7 @@ $('logout').addEventListener('click',async()=>{try{await call('/api/logout');if(
 $('addToggle').addEventListener('click',()=>showEditor());$('cancelEdit').addEventListener('click',()=>{$('skuForm').classList.add('hidden');editing=null});
 function showEditor(sku=null){editing=sku?.id??null;$('skuForm').reset();$('skuName').value=sku?.name||'';$('skuLead').value=sku?.lead??7;$('skuStock').value=sku?.stock??'';$('skuService').value=sku?.service??95;$('skuMethod').value=sku?.method||'sma';$('skuWindow').value=sku?.window??7;$('skuData').value=sku?.data||'';$('saveSku').textContent=editing?(lang()==='en'?'Save changes':'変更を保存'):t('商品を保存');$('skuForm').classList.remove('hidden');$('skuName').focus()}
 function analyzeSku(s){return analyze({demand:parseDemand(s.data),leadTime:s.lead,service:s.service,inventory:s.stock,method:s.method,window:s.window})}
-$('skuForm').addEventListener('submit',e=>{e.preventDefault();if(!authorized)return;clearWarn();const s={id:editing||(globalThis.crypto?.randomUUID?.() ?? 'sku_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)),name:$('skuName').value.trim(),lead:Number($('skuLead').value),stock:$('skuStock').value.trim()===''?null:Number($('skuStock').value),method:$('skuMethod').value,window:Number($('skuWindow').value),service:Number($('skuService').value),data:$('skuData').value.trim()};if(!s.name)return warn('商品名を入力してください。');if(s.data.length>200000)return warn('需要データが長すぎます。');try{analyzeSku(s)}catch(err){return warn(err.message)}if(!editing&&skus.length>=200)return warn('このテスト版では登録は最大200商品です。');if(editing){skus=skus.map(t=>t.id===editing?s:t)}else skus.push(s);analyses.delete(s.id);persist();$('skuForm').classList.add('hidden');editing=null;selected=s.id;renderTable();toast('商品を保存しました')});
+$('skuForm').addEventListener('submit',e=>{e.preventDefault();if(!authorized)return;clearWarn();const s={id:editing||(globalThis.crypto?.randomUUID?.() ?? 'sku_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)),name:$('skuName').value.trim(),lead:Number($('skuLead').value),stock:$('skuStock').value.trim()===''?null:Number($('skuStock').value),method:$('skuMethod').value,window:Number($('skuWindow').value),service:Number($('skuService').value),data:$('skuData').value.trim()};if(!s.name)return warn('商品名を入力してください。');if(s.data.length>200000)return warn('需要データが長すぎます。');try{analyzeSku(s)}catch(err){return warn(err.message)}if(!editing&&skus.length>=200)return warn('Proでは登録は最大200商品です。');if(editing){skus=skus.map(t=>t.id===editing?s:t)}else skus.push(s);analyses.delete(s.id);persist();$('skuForm').classList.add('hidden');editing=null;selected=s.id;renderTable();toast('商品を保存しました')});
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(skus))}catch{warn('このブラウザでの保存に失敗しました。容量やプライベートモードを確認してください。')}}
 // Yield between SKUs so the browser can repaint; prevent excessive batch work.
 $('runAll').addEventListener('click',async()=>{
@@ -146,7 +146,7 @@ $('proImportRun').addEventListener('click',()=>{
  const keys=[...$('proSeries').querySelectorAll('input:checked')].map(el=>el.value);
  const split=document.querySelector('input[name=importMode]:checked')?.value!=='aggregate';
  const list=selectedSeries(importInspection,$('proOrientation').value,keys,split);
- if(skus.length+list.length>200)throw new Error(lang()==='en'?'This pilot supports up to 200 product series.':'この試作版では登録可能な系列は最大200件です。');
+ if(skus.length+list.length>200)throw new Error(lang()==='en'?'This pilot supports up to 200 product series.':'Proでは登録可能な系列は最大200件です。');
  const errors=[],accepted=[];
  for(const x of list){
    const product={id:(globalThis.crypto?.randomUUID?.() ?? 'sku_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)),name:x.name,lead:7,stock:null,service:95,method:'sma',window:7,data:x.values.join(',')};

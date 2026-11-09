@@ -1,7 +1,7 @@
 {
   "app": "DemandScope",
-  "release": "buyer-email-checkout-2026-11-09-r8",
-  "expected_main_before_merge": "625c3eb185da7230274f2f3b7ba27ba0a8394fd6",
+  "release": "portal-email-delay-guidance-2026-11-09-r9",
+  "expected_main_before_merge": "4459e6994aa7acfeb2f739eb4f5b95b18e6bce42",
   "features": [
     "stripe-test",
     "legal-pages",
@@ -19,7 +19,9 @@
     "stripe-portal-email-login",
     "subscription-recovery-link",
     "buyer-email-checkout",
-    "stripe-customer-email-binding"
+    "stripe-customer-email-binding",
+    "portal-email-delay-guidance",
+    "purchase-email-recovery-guidance"
   ],
   "d1_database": "demandscope-web-stock",
   "cloudflare_git_reconnected": true

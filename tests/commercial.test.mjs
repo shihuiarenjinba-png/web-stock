@@ -11,10 +11,9 @@ test('subscription webhook snapshot extracts durable billing state',()=>{
  assert.deepEqual(m,{subscription:'sub_123',customer:'cus_123',memberId:null,status:'active',price:'price_123',currentPeriodEnd:1900000000,cancelAtPeriodEnd:true,livemode:false});
 });
 
-test('checkout completion creates pending subscription sync record',()=>{
+test('checkout completion does not overwrite subscription lifecycle state',()=>{
  const m=subscriptionMutationFromEvent({type:'checkout.session.completed',data:{object:{mode:'subscription',subscription:'sub_abc',customer:'cus_abc',livemode:false}}});
- assert.equal(m.status,'checkout_complete_pending_sync');
- assert.equal(m.subscription,'sub_abc');assert.equal(m.customer,'cus_abc');
+ assert.equal(m,null);
 });
 
 test('irrelevant Stripe events do not mutate subscription state',()=>{
@@ -57,10 +56,10 @@ test('checkout acceptance migration exists',()=>{
 });
 
 
-test('Stripe webhook metadata links authenticated member to subscription and consent',()=>{
+test('Stripe checkout metadata links authenticated member to durable consent without mutating subscription lifecycle state',()=>{
  const event={type:'checkout.session.completed',data:{object:{id:'cs_test_member',mode:'subscription',customer:'cus_member',subscription:'sub_member',livemode:false,metadata:{member_id:'member_12345678',legal_version:'2026-11-08',legal_accepted_at:'1794191111'}}}};
  const s=subscriptionMutationFromEvent(event),a=checkoutAcceptanceFromEvent(event);
- assert.equal(s.memberId,'member_12345678');assert.equal(a.memberId,'member_12345678');
+ assert.equal(s,null);assert.equal(a.memberId,'member_12345678');assert.equal(a.subscription,'sub_member');
 });
 test('member-link D1 migration is present',()=>{
  const sql=readFileSync(new URL('../migrations/0003_member_stripe_link.sql',import.meta.url),'utf8');

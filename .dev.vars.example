@@ -1,18 +1,29 @@
 # NEVER commit actual API keys. Copy to .dev.vars and fill locally.
-# Accepts a TEST secret key (sk_test_...) or a permission-scoped TEST restricted key (rk_test_...).
-# NEVER use sk_live_ or rk_live_ here.
+
+# TEST (default mode)
 STRIPE_SECRET_KEY=rk_test_REPLACE_ME
-# Optional for an existing dedicated test price. Leave unset for JPY 100/month inline Checkout.
+# Optional dedicated TEST Price. If omitted, TEST only falls back to JPY 100/month inline Checkout.
 # STRIPE_PRO_PRICE_ID=price_TEST_PRICE_ID
+# STRIPE_TEST_WEBHOOK_SECRET=whsec_TEST_REPLACE_ME
+
+# Shared
 SESSION_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_CHARACTERS
 APP_ORIGIN=http://localhost:8788
 
-# Commercial SaaS foundation (keep real values only in Cloudflare Secrets/Variables)
-# STRIPE_WEBHOOK_SECRET=whsec_REPLACE_ME
+# LIVE — keep disabled until all launch gates pass.
+# LIVE_BILLING_ENABLED=false
+# STRIPE_LIVE_SECRET_KEY=rk_live_REPLACE_ME
+# STRIPE_LIVE_PRO_PRICE_ID=price_LIVE_DEMANDSCOPE_PRO_980
+# STRIPE_LIVE_PORTAL_CONFIG_ID=bpc_1UZqUZBGa8rL8jwIrmBsxuO0
+# STRIPE_LIVE_PORTAL_LOGIN_URL=https://billing.stripe.com/p/login/7sYaEW1Q36DN9Km1GN93y00
+# STRIPE_LIVE_WEBHOOK_SECRET=whsec_LIVE_REPLACE_ME
+
+# Member identity. Required before LIVE_BILLING_ENABLED=true.
 # GOOGLE_CLIENT_ID=REPLACE_ME.apps.googleusercontent.com
 # GOOGLE_CLIENT_SECRET=REPLACE_ME
-# AUTH_REQUIRED=false  # Switch to true only after D1 + Google OIDC + Stripe member linking E2E passes.
-# LEGAL_OPERATOR_NAME=REPLACE_BEFORE_LIVE
-# LEGAL_ADDRESS=REPLACE_BEFORE_LIVE
-# LEGAL_PHONE=REPLACE_BEFORE_LIVE
-# SUPPORT_EMAIL=REPLACE_BEFORE_LIVE
+# AUTH_REQUIRED=false
+
+# Commercial/legal gates.
+# REFUND_POLICY_CONFIRMED=false
+# LEGAL_DISCLOSURE_URL=https://namidata-lab-public.lingering-salad-74bc.workers.dev/legal/disclosure-request
+# SUPPORT_URL=https://...

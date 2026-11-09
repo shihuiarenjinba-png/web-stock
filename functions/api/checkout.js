@@ -1,9 +1,10 @@
-import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError} from '../../server/stripe.js';
+import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError,billingMode,activePriceId} from '../../server/stripe.js';
 import {LEGAL_VERSION} from '../../server/legal.js';
 import {authConfigured,authenticatedMember} from '../../server/auth.js';
 function validBuyerEmail(value){return typeof value==='string'&&value.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)}
 export async function onRequestPost({request,env}){
- if(!isConfigured(env))return json({error:'Stripeテスト接続が未設定です。管理者の設定後に利用できます。'},503);
+ const mode=billingMode(env),priceId=activePriceId(env);
+ if(!isConfigured(env))return json({error:mode==='live'?'Stripe本番接続が未設定です。管理者の設定後に利用できます。':'Stripeテスト接続が未設定です。管理者の設定後に利用できます。'},503);
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
  let input={};try{input=await request.json()}catch{}
  if(input?.accept_terms!==true)return json({error:'利用規約・プライバシーポリシー・課金条件への同意が必要です。'},400);
@@ -21,7 +22,7 @@ export async function onRequestPost({request,env}){
  ...(member?.stripe_customer_id?{customer:member.stripe_customer_id}:{customer_email:buyerEmail}),
  'payment_method_types[0]':'card',
  'wallet_options[link][display]':'never',
- ...(env.STRIPE_PRO_PRICE_ID?{'line_items[0][price]':env.STRIPE_PRO_PRICE_ID}:{
+ ...(priceId?{'line_items[0][price]':priceId}:{
  'line_items[0][price_data][currency]':'jpy',
  'line_items[0][price_data][unit_amount]':String(TEST_MONTHLY_JPY),
  'line_items[0][price_data][product_data][name]':'DemandScope Pro (TEST ONLY)',
@@ -38,7 +39,7 @@ export async function onRequestPost({request,env}){
     stripe_code:e.code,
     stripe_param:e.param,
     request_id:e.requestId,
-    hint:e.status===403?'制限付きAPIキーのCheckout Sessions権限を確認してください。':e.status===401?'Stripe APIキーが有効なテストキーか確認してください。':'Stripeのテスト設定と権限を確認してください。'
+    hint:e.status===403?'制限付きAPIキーのCheckout Sessions権限を確認してください。':e.status===401?(mode==='live'?'Stripe本番APIキーが有効か確認してください。':'Stripe APIキーが有効なテストキーか確認してください。'):(mode==='live'?'Stripeの本番設定と権限を確認してください。':'Stripeのテスト設定と権限を確認してください。')
   },502);
   return json({error:'Stripe Checkoutを開始できません。',detail:'Cloudflare側の処理でエラーが発生しました。'},502)
  }

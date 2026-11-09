@@ -24,8 +24,11 @@ const required = [
   'server/stripe.js',
   'server/subscription-store.js',
   'server/legal.js',
+  'server/auth.js',
+  'server/access.js',
   'migrations/0001_commercial_core.sql',
   'migrations/0002_checkout_acceptance.sql',
+  'migrations/0003_member_stripe_link.sql',
   'functions/api/checkout.js',
   'functions/api/activate.js',
   'functions/api/entitlement.js',
@@ -33,6 +36,10 @@ const required = [
   'functions/api/logout.js',
   'functions/api/stripe-webhook.js',
   'functions/api/commercial-readiness.js',
+  'functions/api/auth/login.js',
+  'functions/api/auth/callback.js',
+  'functions/api/auth/me.js',
+  'functions/api/auth/logout.js',
 ];
 for (const path of required) {
   const full = resolve(root, path);
@@ -62,3 +69,5 @@ const commerceHtml = readFileSync(resolve(root, 'public/legal/commerce/index.htm
 if (!/本番販売開始前に掲載/.test(commerceHtml)) throw new Error('Test-stage commerce disclosure must not pretend live operator details are complete.');
 
 if (!/id="legalConsent"/.test(proHtml)) throw new Error('Pro checkout must require explicit legal consent.');
+
+if (!/id="memberAuth"/.test(proHtml)) throw new Error('Pro surface must include member authentication UI.');

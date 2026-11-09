@@ -34,6 +34,7 @@ const required = [
   'functions/api/activate.js',
   'functions/api/entitlement.js',
   'functions/api/portal.js',
+  'functions/api/portal-login.js',
   'functions/api/logout.js',
   'functions/api/stripe-webhook.js',
   'functions/api/commercial-readiness.js',
@@ -72,3 +73,5 @@ if (!/本番販売開始前に掲載/.test(commerceHtml)) throw new Error('Test-
 if (!/id="legalConsent"/.test(proHtml)) throw new Error('Pro checkout must require explicit legal consent.');
 
 if (!/id="memberAuth"/.test(proHtml)) throw new Error('Pro surface must include member authentication UI.');
+if (!/id="buyerEmail"/.test(proHtml)) throw new Error('Pro checkout must collect an explicit buyer email.');
+if (!/10分以上届かない場合/.test(proHtml)) throw new Error('Pro surface must explain Stripe portal email delay and recovery guidance.');

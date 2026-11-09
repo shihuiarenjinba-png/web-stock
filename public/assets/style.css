@@ -61,7 +61,7 @@
  #pdf-print-area .pdf-summary{break-inside:auto;page-break-inside:auto}
  #pdf-print-area thead{display:table-header-group}
  #pdf-print-area .pdf-summary-table{font-size:8.5pt}
- #pdf-print-area .pdf-detail-table td:first-child{width:42%;font-weight:650}
+ #pdf-print-area .pdf-detail-table td:nth-child(1),#pdf-print-area .pdf-detail-table td:nth-child(3){width:24%;font-weight:700}
  #pdf-print-area .pdf-svg{display:block;width:100%;height:auto;max-height:58mm;margin:2mm 0 4mm;border:1px solid #d9e1e4;background:#fff}
  #pdf-print-area .pdf-axis{stroke:#617985;stroke-width:1;fill:none}
  #pdf-print-area .pdf-bar{fill:#b9d7df}

@@ -90,3 +90,5 @@
 @media(max-width:690px){.legal-card{padding:20px}.legal-table>div{grid-template-columns:1fr}.legal-table b{padding-bottom:5px}.legal-table span{padding-top:5px}}
 
 .subscription-summary{display:grid;gap:4px;margin:12px 0;padding:12px;border:1px solid #35536d;background:#0f2133;border-radius:10px;color:#aebfd0;font-size:11px;line-height:1.5}.subscription-summary strong{color:#e7f2ff;font-size:12px}.subscription-summary a{color:#75e2d4}
+
+.legal-consent{display:flex;gap:9px;align-items:flex-start;margin:12px 0;color:#aebfd0;font-size:11px;line-height:1.55}.legal-consent input{margin-top:3px;flex:0 0 auto}.legal-consent a{color:#75e2d4}

@@ -5,6 +5,7 @@ import {onRequestPost as checkout} from '../functions/api/checkout.js';
 import {onRequestPost as activate} from '../functions/api/activate.js';
 import {onRequestGet as verify} from '../functions/api/entitlement.js';
 import {authConfigured,beginGoogleLogin,issueMemberCookie} from '../server/auth.js';
+import {subscriptionMutationFromEvent,checkoutAcceptanceFromEvent} from '../server/subscription-store.js';
 const env={STRIPE_SECRET_KEY:'sk_test_mock_only_123',STRIPE_PRO_PRICE_ID:'price_valid',SESSION_SECRET:'X'.repeat(48),APP_ORIGIN:'http://localhost:8788'};
 function request(path,origin='http://localhost:8788',body=null,headers={}){return new Request('http://localhost:8788'+path,{method:body===null?'GET':'POST',headers:{Origin:origin,'Content-Type':'application/json',...headers},body:body===null?undefined:JSON.stringify(body)})}
 const sess={livemode:false,mode:'subscription',status:'complete',payment_status:'paid',metadata:{app:'demand-scope-pro'},subscription:'sub_test123',customer:'cus_test123'};
@@ -179,6 +180,19 @@ test('checkout records legal version and accepted timestamp in Stripe metadata',
   assert.equal(form.get('subscription_data[metadata][legal_version]'),'2026-11-08');
   assert.match(form.get('metadata[legal_accepted_at]'),/^\d{10}$/);
  }finally{globalThis.fetch=old}
+});
+
+test('checkout completion records acceptance without downgrading subscription lifecycle status',()=>{
+ const event={id:'evt_test_checkout',type:'checkout.session.completed',created:1794208204,livemode:false,data:{object:{
+  id:'cs_test_linkage123',mode:'subscription',customer:'cus_test123',subscription:'sub_test123',livemode:false,
+  metadata:{app:'demand-scope-pro',legal_version:'2026-11-08',legal_accepted_at:'1794208087'}
+ }}};
+ const acceptance=checkoutAcceptanceFromEvent(event);
+ assert.equal(acceptance.customer,'cus_test123');
+ assert.equal(acceptance.subscription,'sub_test123');
+ assert.equal(subscriptionMutationFromEvent(event),null);
+ const created={type:'customer.subscription.created',data:{object:{id:'sub_test123',customer:'cus_test123',status:'active',livemode:false,metadata:{app:'demand-scope-pro'},items:{data:[{price:{id:'price_test123'},current_period_end:1796800000}]}}}};
+ assert.equal(subscriptionMutationFromEvent(created).status,'active');
 });
 
 

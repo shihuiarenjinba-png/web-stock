@@ -28,7 +28,7 @@ test('public legal pages and SEO separation exist',()=>{
  const pro=readFileSync(new URL('../public/pro/index.html',import.meta.url),'utf8');
  const robots=readFileSync(new URL('../public/robots.txt',import.meta.url),'utf8');
  for(const html of [terms,privacy,commerce,billing])assert.match(html,/DemandScope/);
- assert.match(commerce,/本番販売開始前に掲載/);
+ assert.match(commerce,/980円\/月/);assert.match(commerce,/請求があり次第遅滞なく/);assert.match(billing,/日割返金は行いません/);
  assert.match(pro,/noindex,nofollow/);
  assert.match(pro,/自動更新/);
  assert.match(robots,/Disallow: \/pro\//);
@@ -44,8 +44,8 @@ test('commercial migration contains idempotent Stripe event and subscription tab
 
 
 test('checkout completion captures legal consent evidence for D1',()=>{
- const a=checkoutAcceptanceFromEvent({type:'checkout.session.completed',data:{object:{id:'cs_test_1',mode:'subscription',customer:'cus_1',subscription:'sub_1',livemode:false,metadata:{legal_version:'2026-11-08',legal_accepted_at:'1794190000'}}}});
- assert.deepEqual(a,{session:'cs_test_1',customer:'cus_1',subscription:'sub_1',memberId:null,legalVersion:'2026-11-08',acceptedAt:1794190000,livemode:false});
+ const a=checkoutAcceptanceFromEvent({type:'checkout.session.completed',data:{object:{id:'cs_test_1',mode:'subscription',customer:'cus_1',subscription:'sub_1',livemode:false,metadata:{legal_version:'2026-11-10',legal_accepted_at:'1794190000'}}}});
+ assert.deepEqual(a,{session:'cs_test_1',customer:'cus_1',subscription:'sub_1',memberId:null,legalVersion:'2026-11-10',acceptedAt:1794190000,livemode:false});
 });
 test('checkout consent without legal metadata is not persisted as evidence',()=>{
  assert.equal(checkoutAcceptanceFromEvent({type:'checkout.session.completed',data:{object:{id:'cs_test_1',mode:'subscription',customer:'cus_1',subscription:'sub_1',metadata:{}}}}),null);
@@ -57,7 +57,7 @@ test('checkout acceptance migration exists',()=>{
 
 
 test('Stripe checkout metadata links authenticated member to durable consent without mutating subscription lifecycle state',()=>{
- const event={type:'checkout.session.completed',data:{object:{id:'cs_test_member',mode:'subscription',customer:'cus_member',subscription:'sub_member',livemode:false,metadata:{member_id:'member_12345678',legal_version:'2026-11-08',legal_accepted_at:'1794191111'}}}};
+ const event={type:'checkout.session.completed',data:{object:{id:'cs_test_member',mode:'subscription',customer:'cus_member',subscription:'sub_member',livemode:false,metadata:{member_id:'member_12345678',legal_version:'2026-11-10',legal_accepted_at:'1794191111'}}}};
  const s=subscriptionMutationFromEvent(event),a=checkoutAcceptanceFromEvent(event);
  assert.equal(s,null);assert.equal(a.memberId,'member_12345678');assert.equal(a.subscription,'sub_member');
 });

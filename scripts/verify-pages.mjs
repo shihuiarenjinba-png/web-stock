@@ -68,7 +68,9 @@ const proHtml = readFileSync(resolve(root, 'public/pro/index.html'), 'utf8');
 if (!/noindex,nofollow/.test(proHtml)) throw new Error('Pro surface must remain noindex,nofollow.');
 if (!/自動更新/.test(proHtml)) throw new Error('Pro checkout surface must disclose recurring billing.');
 const commerceHtml = readFileSync(resolve(root, 'public/legal/commerce/index.html'), 'utf8');
-if (!/本番販売開始前に掲載/.test(commerceHtml)) throw new Error('Test-stage commerce disclosure must not pretend live operator details are complete.');
+if (!/980円\/月/.test(commerceHtml)) throw new Error('Live commerce disclosure must show the JPY 980 monthly price.');
+if (!/請求があり次第遅滞なく/.test(commerceHtml)) throw new Error('Commerce disclosure must include the request-based operator disclosure notice.');
+if (!/日割返金は行いません/.test(commerceHtml)) throw new Error('Commerce disclosure must state the live refund policy.');
 
 if (!/id="legalConsent"/.test(proHtml)) throw new Error('Pro checkout must require explicit legal consent.');
 

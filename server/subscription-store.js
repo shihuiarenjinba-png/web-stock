@@ -41,7 +41,7 @@ export async function persistStripeEvent(db,event){
 VALUES(?,?,?,?,?,?,?)`).bind(acceptance.session,acceptance.customer,acceptance.subscription,acceptance.legalVersion,acceptance.acceptedAt,acceptance.livemode?1:0,acceptance.memberId).run();
    if(acceptance.memberId&&acceptance.customer){
     await db.prepare('UPDATE members SET stripe_customer_id=COALESCE(stripe_customer_id,?),updated_at=CURRENT_TIMESTAMP WHERE id=? AND (stripe_customer_id IS NULL OR stripe_customer_id=?)').bind(acceptance.customer,acceptance.memberId,acceptance.customer).run();
-    for(const doc of ['terms','privacy','commerce','billing'])await db.prepare('INSERT OR IGNORE INTO legal_acceptances(member_id,document_type,document_version,accepted_at) VALUES(?,?,?,datetime(?,'+"'unixepoch'"+'))').bind(acceptance.memberId,doc,acceptance.legalVersion,acceptance.acceptedAt).run();
+    for(const doc of ['terms','privacy','commerce','billing'])await db.prepare("INSERT OR IGNORE INTO legal_acceptances(member_id,document_type,document_version,accepted_at) VALUES(?,?,?,datetime(?,'unixepoch'))").bind(acceptance.memberId,doc,acceptance.legalVersion,acceptance.acceptedAt).run();
    }
   }
   if(mutation){

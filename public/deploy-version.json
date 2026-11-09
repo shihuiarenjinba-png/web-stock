@@ -1,12 +1,14 @@
 {
   "app": "DemandScope",
-  "release": "commercial-auth-2026-11-09-r1",
+  "release": "post-git-reconnect-2026-11-09-r2",
+  "expected_main_before_merge": "1f8040277205b34bbe1953968ade2951b5331530",
   "features": [
     "stripe-test",
     "legal-pages",
     "d1-schema",
     "webhook-persistence",
-    "google-oidc-foundation"
+    "google-oidc-foundation",
+    "checkout-legal-consent"
   ],
-  "expected_after_merge": true
+  "cloudflare_git_reconnected": true
 }

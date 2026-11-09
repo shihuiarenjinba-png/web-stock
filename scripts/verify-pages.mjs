@@ -9,6 +9,7 @@ const required = [
   'public/_headers',
   'public/robots.txt',
   'public/sitemap.xml',
+  'public/deploy-version.json',
   'public/legal/terms/index.html',
   'public/legal/privacy/index.html',
   'public/legal/commerce/index.html',

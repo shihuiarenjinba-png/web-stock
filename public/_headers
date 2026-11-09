@@ -10,3 +10,6 @@
 
 /api/*
   X-Robots-Tag: noindex, nofollow
+
+/deploy-version.json
+  Cache-Control: no-store, max-age=0

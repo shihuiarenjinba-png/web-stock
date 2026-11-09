@@ -2,6 +2,7 @@ import {drawHistogram} from './chart.js';
 import {analyze,parseDemand,SAMPLE,formatNumber,riskLabel,reportText} from './logic.js';
 import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './importer.js';
 import {initI18n,lang,t,errorMessage,applyI18n} from './i18n.js';
+import {freeFileIssue,freeSeriesIssue,freeManualIssue} from './plan-limits.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
 const form=$('form'),status=$('status');
 let workbook=null,inspection=null, results=[],selected=0, fileReadSequence=0;
@@ -48,7 +49,7 @@ function refreshLimits(){const root=$('freeSeries'),checked=root.querySelectorAl
 $('freeFile').addEventListener('change',async e=>{
  const fileSequence=++fileReadSequence;
  clearError();$('freeFileName').textContent=e.target.files?.[0]?.name??t('ファイルが選択されていません');results=[];$('empty').classList.remove('hidden');$('results').classList.add('hidden');$('freeMulti').classList.add('hidden');$('status').textContent=lang()==='en'?'Not run':'未実行';$('status').classList.add('pending-tag');$('freeImport').classList.add('hidden');workbook=null;inspection=null;
- try{if(!e.target.files?.[0])return;const loaded=await loadWorkbook(e.target.files[0]);if(fileSequence!==fileReadSequence)return;workbook=loaded;options($('freeSheet'),workbook.sheets.map(s=>s.name));readSheet();$('freeImport').classList.remove('hidden');}
+ try{if(!e.target.files?.[0])return;const file=e.target.files[0];if(freeFileIssue(file)==='file_size')throw new Error(lang()==='en'?'Free accepts files up to 500 KB. Use Pro for larger business files.':'無料版で読み込めるファイルは最大500KBです。大きな業務ファイルはProをご利用ください。');const loaded=await loadWorkbook(file);if(fileSequence!==fileReadSequence)return;workbook=loaded;options($('freeSheet'),workbook.sheets.map(s=>s.name));readSheet();$('freeImport').classList.remove('hidden');}
  catch(err){if(fileSequence===fileReadSequence)error(err)}
 });
 $('freeSheet').addEventListener('change',()=>{try{results=[];$('empty').classList.remove('hidden');$('results').classList.add('hidden');$('status').textContent=lang()==='en'?'Not run':'未実行';readSheet();clearError()}catch(e){error(e)}});
@@ -57,7 +58,7 @@ $('freeImportRun').addEventListener('click',()=>{
  clearError();try{
    const keys=[...$('freeSeries').querySelectorAll('input:checked')].map(el=>el.value);
    const series=selectedSeries(inspection,$('freeOrientation').value,keys,true);
-   if(series.length>2)throw new Error('select_series');
+   const freeIssue=freeSeriesIssue(series);if(freeIssue==='series_count')throw new Error('select_series');if(freeIssue==='period_count')throw new Error(lang()==='en'?'Free analyzes up to 100 periods per series. Use Pro for longer histories.':'無料版は1系列あたり最大100期までです。長期履歴はProで分析してください。');
    results=series.map(s=>{
      const box=[...$('freeSeries').querySelectorAll('input[type=checkbox]')].find(el=>el.value===s.key)?.closest('label')?.querySelector('.series-stock');
      const raw=box?.value?.trim();const inv=raw?Number(raw):(series.length===1&&$('inventory').value.trim()!==''?Number($('inventory').value):null);
@@ -74,7 +75,8 @@ $('method').addEventListener('change',()=>{$('windowField').classList.toggle('hi
 $('sample').addEventListener('click',()=>{$('data').value=SAMPLE.join(', ');$('inventory').value=390;clearError();form.requestSubmit();});
 form.addEventListener('submit',e=>{e.preventDefault();clearError();try{
  const inv=$('inventory').value.trim()===''?null:Number($('inventory').value);
- const result=analyze({demand:parseDemand($('data').value),leadTime:Number($('lead').value),service:95,method:'sma',window:7,inventory:inv});
+ const demand=parseDemand($('data').value);if(freeManualIssue(demand)==='period_count')throw new Error(lang()==='en'?'Free manual analysis is limited to 100 periods. Use Pro for longer histories.':'無料版の手動分析は最大100期までです。長期履歴はProをご利用ください。');
+ const result=analyze({demand,leadTime:Number($('lead').value),service:95,method:'sma',window:7,inventory:inv});
  results=[{name:lang()==='en'?'Manual series':'手動入力',result}];selected=0;render();
 }catch(err){error(err);status.textContent=lang()==='en'?'Input error':'入力エラー';status.classList.add('pending-tag');}});
 $('sampleCsv').addEventListener('click',()=>{const vals=SAMPLE.map((n,i)=>[i+1,n,Math.max(0,n+((i%5)-2)*3)]);downloadText('demandscope-sample-2-series.csv',toCSV([['Day','SKU-A','SKU-B'],...vals]));notify(lang()==='en'?'Two-series sample CSV saved.':'2系列のCSVサンプルを保存しました。');});

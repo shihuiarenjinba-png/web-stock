@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {analyze,SAMPLE} from '../public/assets/logic.js';
-import {riskReportModel} from '../public/assets/pdf-report.js';
+import {riskReportModel,portfolioNarrative} from '../public/assets/pdf-report.js';
 
 test('PDF report model includes portfolio summary and decision fields',()=>{
  const result=analyze({demand:SAMPLE,leadTime:7,service:95,inventory:320});
@@ -33,4 +33,23 @@ test('PDF report model supports multiple products and English labels',()=>{
 
 test('PDF report model rejects empty export',()=>{
  assert.throws(()=>riskReportModel({results:[],language:'ja'}),/No results/);
+});
+
+
+test('Pro PDF narrative ranks the highest stockout risk and gives actionable context',()=>{
+ const a=analyze({demand:SAMPLE,leadTime:7,service:95,inventory:250});
+ const b=analyze({demand:SAMPLE.map(v=>v+3),leadTime:7,service:95,inventory:420});
+ const narrative=portfolioNarrative({results:[{name:'SKU-A',result:a},{name:'SKU-B',result:b}],language:'ja'});
+ assert.ok(narrative.overview.some(x=>x.includes('2商品')));
+ assert.ok(narrative.overview.some(x=>x.includes('SKU-A')||x.includes('SKU-B')));
+ assert.equal(narrative.priorities.length,2);
+ assert.match(narrative.priorities[0],/現在庫/);
+ assert.ok(narrative.actions.some(x=>x.includes('在庫ポジション')));
+});
+
+test('Pro PDF narrative handles missing inventory without inventing stockout risk',()=>{
+ const r=analyze({demand:SAMPLE,leadTime:7,service:95,inventory:null});
+ const narrative=portfolioNarrative({results:[{name:'SKU-X',result:r}],language:'ja'});
+ assert.ok(narrative.overview.some(x=>x.includes('欠品確率比較はまだできません')));
+ assert.ok(narrative.priorities[0].includes('現在庫を入力'));
 });

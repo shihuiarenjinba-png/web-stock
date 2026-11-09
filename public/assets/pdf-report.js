@@ -3,7 +3,7 @@
 const T={
  ja:{
   title:'需要予測・在庫リスク分析レポート',generated:'作成日時',summary:'全体サマリー',details:'商品別詳細',
-  product:'商品',history:'履歴期数',baseline:'基準需要（日次）',model:'基準方式',sigma:'採用残差SD',
+  product:'商品',metric:'指標',value:'値',history:'履歴期数',baseline:'基準需要（日次）',model:'基準方式',sigma:'採用残差SD',
   vol:'ボラティリティ内訳',lt:'リードタイム',service:'サービスレベル',ltmean:'リードタイム需要平均',
   ltsd:'リードタイム需要SD',safety:'安全在庫',reorder:'推奨発注点',inventory:'現在庫',
   risk:'在庫切れ確率',p50:'P50',p90:'P90',p95:'P95',p99:'P99',z:'直近の乖離（σ）',
@@ -14,7 +14,7 @@ const T={
  },
  en:{
   title:'Demand forecast & inventory risk report',generated:'Generated',summary:'Portfolio summary',details:'Product details',
-  product:'Product',history:'History',baseline:'Daily baseline',model:'Baseline model',sigma:'Selected residual SD',
+  product:'Product',metric:'Metric',value:'Value',history:'History',baseline:'Daily baseline',model:'Baseline model',sigma:'Selected residual SD',
   vol:'Volatility breakdown',lt:'Lead time',service:'Service level',ltmean:'Mean lead-time demand',
   ltsd:'Lead-time demand SD',safety:'Safety stock',reorder:'Reorder point',inventory:'On-hand stock',
   risk:'Stockout probability',p50:'P50',p90:'P90',p95:'P95',p99:'P99',z:'Latest deviation (σ)',
@@ -74,7 +74,7 @@ export function printRiskReport({results,language='ja'}){
  const summary=section(t.summary,'pdf-summary');summary.append(tableFor([t.product,t.reorder,t.safety,t.risk,t.warnings],model.map(x=>x.summary),'pdf-summary-table'));root.append(summary);
  model.forEach((item,i)=>{
   const s=section(t.details+' '+(i+1)+' / '+model.length+' · '+item.name,'pdf-detail');s.classList.add('pdf-newpage');
-  s.append(tableFor([t.product,'Value'],item.details,'pdf-detail-table'));
+  const paired=[];for(let j=0;j<item.details.length;j+=2){const a=item.details[j],b=item.details[j+1]||['',''];paired.push([a[0],a[1],b[0],b[1]])}\n  s.append(tableFor([t.metric,t.value,t.metric,t.value],paired,'pdf-detail-table'));
   const chartTitle=cell('h3',t.distribution);chartTitle.className='pdf-chart-title';s.append(chartTitle,distributionSvg(item.sums,language));
   const warnTitle=cell('h3',t.warnings);warnTitle.className='pdf-chart-title';s.append(warnTitle);
   if(item.flags.length){const ul=document.createElement('ul');ul.className='pdf-flags';item.flags.forEach(v=>ul.append(cell('li',v)));s.append(ul)}else{s.append(cell('p',t.none))}

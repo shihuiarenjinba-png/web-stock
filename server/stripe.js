@@ -21,14 +21,31 @@ export function configurationDiagnostics(env){
 }
 export function configurationMissing(env){return [...new Set(configurationDiagnostics(env).map(x=>x.name))]}
 export function isConfigured(env){return configurationMissing(env).length===0}
-export function origin(env,request){
- if(env?.APP_ORIGIN)return new URL(env.APP_ORIGIN).origin;
- if(!request)throw new Error('Request required when APP_ORIGIN is not configured');
+function trustedRequestOrigin(request){
+ if(!request)throw new Error('Request required');
  const value=new URL(request.url);
  if(value.protocol!=='https:' && !(value.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(value.hostname)))throw new Error('Untrusted URL');
  return value.origin;
 }
-export function validOrigin(request,env){try{const h=request.headers.get('Origin');return h===origin(env,request)}catch{return false}}
+export function origin(env,request){
+ // For an incoming Pages request, the URL Cloudflare is actually serving is the
+ // safest source for success/cancel callbacks. APP_ORIGIN remains a fallback for
+ // call sites without a Request object and is still validated by configurationDiagnostics().
+ if(request)return trustedRequestOrigin(request);
+ if(env?.APP_ORIGIN)return new URL(env.APP_ORIGIN).origin;
+ throw new Error('Request required when APP_ORIGIN is not configured');
+}
+export function validOrigin(request,env){
+ try{
+  const target=trustedRequestOrigin(request);
+  const h=request.headers.get('Origin');
+  if(h)return new URL(h).origin===target;
+  // Some browser/privacy environments omit Origin on same-origin POSTs. Accept a
+  // same-origin Referer fallback, but never accept a request with neither signal.
+  const ref=request.headers.get('Referer');
+  return !!ref&&new URL(ref).origin===target;
+ }catch{return false}
+}
 export class StripeApiError extends Error {
  constructor(message,{status=502,type=null,code=null,requestId=null,param=null}={}){super(message);this.name='StripeApiError';this.status=status;this.type=type;this.code=code;this.requestId=requestId;this.param=param}
 }

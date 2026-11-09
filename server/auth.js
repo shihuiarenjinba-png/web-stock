@@ -44,13 +44,13 @@ async function upsertMember(env,identity){
  else if(identity.email&&identity.email!==row.email){await env.DB.prepare("UPDATE members SET email=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(identity.email,row.id).run();row.email=identity.email}
  return row;
 }
+export async function issueMemberCookie(memberId,request,env){const origin=secureOrigin(env,request);const session=await signedPayload({v:1,id:memberId,exp:Math.floor(Date.now()/1000)+7*86400},env);return 'demand_auth='+session+'; Path=/; Max-Age='+7*86400+'; HttpOnly; SameSite=Lax'+secureCookie(origin)}
 export async function finishGoogleLogin(request,env){
  if(!authConfigured(env))throw new Error('Google authentication is not configured');
  const u=new URL(request.url),code=u.searchParams.get('code'),state=u.searchParams.get('state'),saved=await readOauthState(request,env);
  if(!code||!state||!saved||!safeEqual(state,saved.state))throw new Error('OAuth state validation failed');
  const identity=await exchangeGoogleCode(code,saved.verifier,request,env),member=await upsertMember(env,identity),origin=secureOrigin(env,request);
- const session=await signedPayload({v:1,id:member.id,exp:Math.floor(Date.now()/1000)+7*86400},env);
- return {member,cookie:'demand_auth='+session+'; Path=/; Max-Age='+7*86400+'; HttpOnly; SameSite=Lax'+secureCookie(origin),clearState:'demand_oauth_state=; Path=/api/auth/; Max-Age=0; HttpOnly; SameSite=Lax'+secureCookie(origin)};
+ return {member,cookie:await issueMemberCookie(member.id,request,env),clearState:'demand_oauth_state=; Path=/api/auth/; Max-Age=0; HttpOnly; SameSite=Lax'+secureCookie(origin)};
 }
 export async function authenticatedMember(request,env){
  if(!authConfigured(env))return null;

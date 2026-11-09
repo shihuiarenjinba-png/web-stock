@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState,TEST_MONTHLY_JPY,configurationMissing,billingMode,activePriceId,expectedLivemode} from '../server/stripe.js';
+import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState,TEST_MONTHLY_JPY,LIVE_MONTHLY_JPY,configurationMissing,billingMode,activePriceId,expectedLivemode,validateLivePriceObject} from '../server/stripe.js';
 import {onRequestPost as checkout} from '../functions/api/checkout.js';
 import {onRequestPost as activate} from '../functions/api/activate.js';
 import {onRequestGet as verify} from '../functions/api/entitlement.js';
@@ -12,6 +12,14 @@ function request(path,origin='http://localhost:8788',body=null,headers={}){retur
 const sess={livemode:false,mode:'subscription',status:'complete',payment_status:'paid',metadata:{app:'demand-scope-pro'},subscription:'sub_test123',customer:'cus_test123'};
 const sub={livemode:false,status:'active',metadata:{app:'demand-scope-pro'},customer:'cus_test123',items:{data:[{price:{id:'price_valid'}}]}};
 test('billing defaults to TEST and LIVE requires an explicit gate, live key and live Price',()=>{assert.equal(billingMode(env),'test');assert.ok(isConfigured(env));assert.ok(!isConfigured({...env,STRIPE_SECRET_KEY:'sk_live_forbidden'}));assert.ok(!isConfigured({...env,SESSION_SECRET:'short'}));const live={LIVE_BILLING_ENABLED:'true',STRIPE_LIVE_SECRET_KEY:'sk_live_mock_123',STRIPE_LIVE_PRO_PRICE_ID:'price_live123',SESSION_SECRET:'L'.repeat(48),APP_ORIGIN:'https://example.com'};assert.equal(billingMode(live),'live');assert.equal(expectedLivemode(live),true);assert.equal(activePriceId(live),'price_live123');assert.ok(isConfigured(live));assert.ok(!isConfigured({...live,STRIPE_LIVE_PRO_PRICE_ID:''}));assert.ok(!isConfigured({...live,STRIPE_LIVE_SECRET_KEY:'sk_test_wrong'}))});
+test('live price validator requires active DemandScope Pro JPY 980 monthly',()=>{
+ const good={id:'price_live123',livemode:true,active:true,currency:'jpy',unit_amount:LIVE_MONTHLY_JPY,recurring:{interval:'month',interval_count:1},product:{active:true,metadata:{app:'demand-scope-pro',tier:'pro'}}};
+ assert.equal(validateLivePriceObject(good).ok,true);
+ assert.equal(validateLivePriceObject({...good,unit_amount:981}).reason,'amount');
+ assert.equal(validateLivePriceObject({...good,currency:'usd'}).reason,'currency');
+ assert.equal(validateLivePriceObject({...good,recurring:{interval:'year',interval_count:1}}).reason,'interval');
+ assert.equal(validateLivePriceObject({...good,product:{active:true,metadata:{app:'other',tier:'pro'}}}).reason,'product_metadata');
+});
 test('reject wrong origin before Stripe',async()=>{const res=await checkout({request:request('/api/checkout','https://evil.test',{}),env});assert.equal(res.status,403)});
 test('same-origin checkout is not blocked by a stale APP_ORIGIN override',async()=>{
  const old=globalThis.fetch;let posted;
@@ -137,20 +145,34 @@ test('live portal login is separate and rejects TEST login URLs',async()=>{
 });
 
 
-test('restricted Stripe keys are mode-scoped and LIVE Checkout requires the configured live Price',async()=>{
+test('restricted Stripe keys are mode-scoped and LIVE Checkout requires a verified JPY 980 Price',async()=>{
  const restricted={...env,STRIPE_SECRET_KEY:'rk_test_sample_restricted_123'};
  assert.equal(isConfigured(restricted),true);assert.equal(configurationMissing(restricted).length,0);
  const live={LIVE_BILLING_ENABLED:'true',STRIPE_LIVE_SECRET_KEY:'rk_live_sample_restricted_123',STRIPE_LIVE_PRO_PRICE_ID:'price_live123',SESSION_SECRET:'L'.repeat(48),APP_ORIGIN:'http://localhost:8788'};
  assert.equal(isConfigured(live),true);
+ const goodPrice={id:'price_live123',livemode:true,active:true,currency:'jpy',unit_amount:980,recurring:{interval:'month',interval_count:1},product:{active:true,metadata:{app:'demand-scope-pro',tier:'pro'}}};
  const old=globalThis.fetch;let seenHeader='',form;
  try {
-   globalThis.fetch=async (_url,opts)=>{seenHeader=opts.headers.Authorization;form=new URLSearchParams(opts.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}))};
+   globalThis.fetch=async (url,opts)=>{
+    if(String(url).includes('/prices/'))return new Response(JSON.stringify(goodPrice));
+    seenHeader=opts.headers.Authorization;form=new URLSearchParams(opts.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/mock'}));
+   };
    let res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:restricted});assert.equal(res.status,200);assert.equal(seenHeader,'Bearer rk_test_sample_restricted_123');
    res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:live});assert.equal(res.status,200);assert.equal(seenHeader,'Bearer rk_live_sample_restricted_123');assert.equal(form.get('line_items[0][price]'),'price_live123');assert.equal(form.get('line_items[0][price_data][unit_amount]'),null);
  }finally{globalThis.fetch=old}
 });
 
 
+test('LIVE Checkout fails closed when configured Price is not JPY 980',async()=>{
+ const live={LIVE_BILLING_ENABLED:'true',STRIPE_LIVE_SECRET_KEY:'sk_live_mock_123',STRIPE_LIVE_PRO_PRICE_ID:'price_wrong',SESSION_SECRET:'L'.repeat(48),APP_ORIGIN:'http://localhost:8788'};
+ const wrong={id:'price_wrong',livemode:true,active:true,currency:'jpy',unit_amount:1200,recurring:{interval:'month',interval_count:1},product:{active:true,metadata:{app:'demand-scope-pro',tier:'pro'}}};
+ const old=globalThis.fetch;let checkoutCalled=false;
+ try{
+  globalThis.fetch=async(url)=>{if(String(url).includes('/prices/'))return new Response(JSON.stringify(wrong));checkoutCalled=true;return new Response('{}')};
+  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:live});
+  assert.equal(res.status,503);const body=await res.json();assert.equal(body.price_check,'amount');assert.equal(checkoutCalled,false);
+ }finally{globalThis.fetch=old}
+});
 test('Stripe API errors preserve safe diagnostic fields without exposing credentials',async()=>{
  const old=globalThis.fetch;
  try{

@@ -19,10 +19,9 @@ export function subscriptionMutationFromEvent(event){
   const subscription=id(obj.id,'sub_'),customer=id(obj.customer,'cus_');if(!subscription||!customer)return null;
   return {subscription,customer,memberId:memberId(obj.metadata?.member_id),status:String(obj.status||'unknown'),price:firstPrice(obj),currentPeriodEnd:periodEnd(obj),cancelAtPeriodEnd:obj.cancel_at_period_end===true,livemode:obj.livemode===true};
  }
- if(type==='checkout.session.completed'&&obj.mode==='subscription'){
-  const subscription=id(obj.subscription,'sub_'),customer=id(obj.customer,'cus_');if(!subscription||!customer)return null;
-  return {subscription,customer,memberId:memberId(obj.metadata?.member_id),status:'checkout_complete_pending_sync',price:null,currentPeriodEnd:null,cancelAtPeriodEnd:false,livemode:obj.livemode===true};
- }
+ // Checkout completion records legal acceptance only. Subscription lifecycle
+ // events are authoritative for status/price/period and must not be downgraded
+ // by an out-of-order checkout.session.completed delivery.
  return null;
 }
 

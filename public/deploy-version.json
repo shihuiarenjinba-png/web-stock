@@ -1,7 +1,7 @@
 {
   "app": "DemandScope",
-  "release": "portal-purchase-email-guidance-2026-11-09-r10",
-  "expected_main_before_merge": "7ce6c9b03a7baa90ccbb6eed95dd411c750ed4cf",
+  "release": "live-billing-gate-2026-11-09-r11",
+  "expected_main_before_merge": "7584fc2dcf9812e3a7ae7c69bb5873935f99d1ab",
   "features": [
     "stripe-test",
     "legal-pages",
@@ -23,7 +23,10 @@
     "portal-email-delay-guidance",
     "purchase-email-recovery-guidance",
     "portal-email-purchase-prerequisite",
-    "portal-email-delay-notice"
+    "portal-email-delay-notice",
+    "explicit-live-billing-gate",
+    "separate-live-stripe-resources",
+    "live-readiness-gate"
   ],
   "d1_database": "demandscope-web-stock",
   "cloudflare_git_reconnected": true

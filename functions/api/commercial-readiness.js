@@ -1,5 +1,6 @@
 import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId,verifyLivePrice,LIVE_MONTHLY_JPY} from '../../server/stripe.js';
 import {DEFAULT_DISCLOSURE_REQUEST_URL} from '../../server/legal.js';
+import {magicLinkConfig} from '../../server/magic-link.js';
 
 export async function onRequestGet({env}){
  let d1SchemaOk=false,d1Error=null,webhookBacklog=null,webhookLastError=null,webhookLastEventType=null;
@@ -61,7 +62,8 @@ export async function onRequestGet({env}){
  if(mode==='live'&&livePrice.checked&&!livePrice.verified)notes.push('Live Price must be an active DemandScope Pro JPY 980 monthly price.');
  if(!legal.refund_policy_confirmed)notes.push('Refund policy must be explicitly confirmed before live sales.');
  if(mode==='live'&&account.checked&&account.payouts_enabled!==true)notes.push('Stripe payouts must be enabled before live launch.');
- const access={provider:'stripe',checkout_browser_activation:true,customer_portal_email_login:true,cross_device_app_login:false};
- notes.push('Stripe Customer Portal authenticates billing management, not DemandScope application login. Cross-device Pro restoration is intentionally unsupported without a separate app identity provider.');
+ const magic=magicLinkConfig(env);
+ const access={provider:'stripe',checkout_browser_activation:true,customer_portal_email_login:true,cross_device_app_login:magic.configured,magic_link:{enabled:magic.enabled,configured:magic.configured,sender_domain:magic.configured?magic.sender_domain:null,ttl_minutes:10}};
+ if(!magic.configured)notes.push('Stripe Customer Portal authenticates billing management, not DemandScope application login. Cross-device Pro restoration stays disabled until the optional email magic-link sender is configured.');
  return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,access,legal,notes});
 }

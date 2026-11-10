@@ -23,3 +23,11 @@ APP_ORIGIN=http://localhost:8788
 # REFUND_POLICY_CONFIRMED=true
 # LEGAL_DISCLOSURE_URL=https://namidata-lab-public.lingering-salad-74bc.workers.dev/legal/disclosure-request
 # SUPPORT_URL=https://...
+
+
+# Optional cross-device Pro recovery by email magic link.
+# Keep disabled until an owned domain is onboarded to Cloudflare Email Service.
+# MAGIC_LINK_ENABLED=false
+# MAGIC_LINK_FROM=noreply@YOUR_OWN_DOMAIN
+# CLOUDFLARE_EMAIL_ACCOUNT_ID=32_HEX_ACCOUNT_ID
+# CLOUDFLARE_EMAIL_API_TOKEN=REPLACE_WITH_EMAIL_SEND_TOKEN

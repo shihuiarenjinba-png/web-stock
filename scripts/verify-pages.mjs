@@ -26,7 +26,6 @@ const required = [
   'server/subscription-store.js',
   'server/legal.js',
   'server/access.js',
-  'server/magic-link.js',
   'server/subscription-lookup.js',
   'server/auth-mail-gateway.js',
   'migrations/0001_commercial_core.sql',

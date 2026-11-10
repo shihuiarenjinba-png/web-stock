@@ -1,3 +1,4 @@
+import {configuredAppOrigin,requestOrigin,requestAllowedForDomainCutover} from './domain.js';
 const enc=new TextEncoder();
 export function json(body,status=200,headers={}) {const h=new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});if(headers instanceof Headers){headers.forEach((value,key)=>h.append(key,value));}else for(const [key,value] of Object.entries(headers))h.append(key,value);return new Response(JSON.stringify(body),{status,headers:h})}
 
@@ -32,7 +33,7 @@ export function configurationDiagnostics(env){
  const priceId=activePriceId(env),priceName=mode==='live'?'STRIPE_LIVE_PRO_PRICE_ID':'STRIPE_PRO_PRICE_ID';
  if(mode==='live'&&!priceId)issues.push({name:priceName,reason:'missing'});
  else if(priceId&&!/^price_[A-Za-z0-9]+$/.test(priceId))issues.push({name:priceName,reason:'invalid_format'});
- if(env?.APP_ORIGIN){try{const u=new URL(env.APP_ORIGIN);if(u.origin!==env.APP_ORIGIN||!(u.protocol==='https:'||(u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname))))issues.push({name:'APP_ORIGIN',reason:'invalid_origin'});}catch{issues.push({name:'APP_ORIGIN',reason:'invalid_origin'})}}
+ if(env?.APP_ORIGIN&&!configuredAppOrigin(env))issues.push({name:'APP_ORIGIN',reason:'invalid_origin'});
  return issues;
 }
 export function configurationMissing(env){return [...new Set(configurationDiagnostics(env).map(x=>x.name))]}
@@ -56,20 +57,16 @@ export async function verifyLivePrice(env){
  const price=await stripe(env,`/prices/${encodeURIComponent(priceId)}?expand[]=product`);
  return validateLivePriceObject(price);
 }
-function trustedRequestOrigin(request){
- if(!request)throw new Error('Request required');
- const value=new URL(request.url);
- if(value.protocol!=='https:' && !(value.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(value.hostname)))throw new Error('Untrusted URL');
- return value.origin;
-}
 export function origin(env,request){
- if(request)return trustedRequestOrigin(request);
- if(env?.APP_ORIGIN)return new URL(env.APP_ORIGIN).origin;
+ const configured=configuredAppOrigin(env);
+ if(configured)return configured;
+ if(request)return requestOrigin(request);
  throw new Error('Request required when APP_ORIGIN is not configured');
 }
 export function validOrigin(request,env){
  try{
-  const target=trustedRequestOrigin(request);
+  if(!requestAllowedForDomainCutover(env,request))return false;
+  const target=requestOrigin(request);
   const h=request.headers.get('Origin');
   if(h)return new URL(h).origin===target;
   const ref=request.headers.get('Referer');

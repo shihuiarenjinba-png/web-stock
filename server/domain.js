@@ -11,6 +11,7 @@ export function configuredAppOrigin(env={}){
   const u=new URL(raw);
   const local=isLocalHost(u.hostname)&&u.protocol==='http:';
   if(!(u.protocol==='https:'||local)||u.username||u.password||u.pathname!=='/'||u.search||u.hash)return null;
+  if(raw!==u.origin)return null;
   return u.origin;
  }catch{return null}
 }
@@ -42,11 +43,12 @@ export function domainStatus(env={}){
  };
 }
 export function canonicalOrRequestOrigin(env,request){
- return configuredAppOrigin(env)||requestOrigin(request);
+ const status=domainStatus(env);
+ return status.ready_for_domain_cutover&&status.origin?status.origin:requestOrigin(request);
 }
 export function requestAllowedForDomainCutover(env,request){
  const status=domainStatus(env);
  if(!status.cutover_enforced)return true;
- if(!status.custom_domain||!status.origin)return false;
+ if(!status.ready_for_domain_cutover||!status.origin)return false;
  try{return requestOrigin(request)===status.origin}catch{return false}
 }

@@ -1,4 +1,4 @@
-import {configuredAppOrigin,requestOrigin,requestAllowedForDomainCutover} from './domain.js';
+import {configuredAppOrigin,requestOrigin,requestAllowedForDomainCutover,canonicalOrRequestOrigin} from './domain.js';
 const enc=new TextEncoder();
 export function json(body,status=200,headers={}) {const h=new Headers({'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});if(headers instanceof Headers){headers.forEach((value,key)=>h.append(key,value));}else for(const [key,value] of Object.entries(headers))h.append(key,value);return new Response(JSON.stringify(body),{status,headers:h})}
 
@@ -58,9 +58,9 @@ export async function verifyLivePrice(env){
  return validateLivePriceObject(price);
 }
 export function origin(env,request){
+ if(request)return canonicalOrRequestOrigin(env,request);
  const configured=configuredAppOrigin(env);
  if(configured)return configured;
- if(request)return requestOrigin(request);
  throw new Error('Request required when APP_ORIGIN is not configured');
 }
 export function validOrigin(request,env){

@@ -4,7 +4,6 @@ import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowse
 import {onRequestPost as checkout} from '../functions/api/checkout.js';
 import {onRequestPost as activate} from '../functions/api/activate.js';
 import {onRequestGet as verify} from '../functions/api/entitlement.js';
-import {authConfigured,beginGoogleLogin,issueMemberCookie} from '../server/auth.js';
 import {subscriptionMutationFromEvent,checkoutAcceptanceFromEvent} from '../server/subscription-store.js';
 import {onRequestGet as portalLogin,portalLoginUrl,DEFAULT_TEST_PORTAL_LOGIN} from '../functions/api/portal-login.js';
 const env={STRIPE_SECRET_KEY:'sk_test_mock_only_123',STRIPE_PRO_PRICE_ID:'price_valid',SESSION_SECRET:'X'.repeat(48),APP_ORIGIN:'http://localhost:8788'};
@@ -249,41 +248,16 @@ test('checkout completion records acceptance without downgrading subscription li
 });
 
 
-function memberDb(member={id:'member_12345678',email:'buyer@example.com',stripe_customer_id:null},subscription=null){
- return {prepare(sql){return {bind(){return {first:async()=>{
-  if(sql.includes('FROM members WHERE id='))return member;
-  if(sql.includes('FROM subscriptions WHERE member_id='))return subscription;
-  return null;
- }}}}}};
-}
-test('Google OIDC foundation emits state+PKCE redirect only when D1 and credentials exist',async()=>{
- const authEnv={...env,DB:memberDb(),GOOGLE_CLIENT_ID:'client.apps.googleusercontent.com',GOOGLE_CLIENT_SECRET:'secret'};
- assert.equal(authConfigured(authEnv),true);assert.equal(authConfigured({...authEnv,DB:null}),false);
- const out=await beginGoogleLogin(request('/api/auth/login'),authEnv),u=new URL(out.url);
- assert.equal(u.origin,'https://accounts.google.com');assert.equal(u.searchParams.get('response_type'),'code');
- assert.equal(u.searchParams.get('redirect_uri'),'http://localhost:8788/api/auth/callback');
- assert.equal(u.searchParams.get('code_challenge_method'),'S256');assert.match(out.cookie,/HttpOnly/);
-});
-test('AUTH_REQUIRED blocks Checkout until a member is signed in',async()=>{
- const authEnv={...env,DB:memberDb(),GOOGLE_CLIENT_ID:'client.apps.googleusercontent.com',GOOGLE_CLIENT_SECRET:'secret',AUTH_REQUIRED:'true'};
- const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:authEnv});
- assert.equal(res.status,401);assert.match((await res.json()).error,/Google/);
-});
-test('authenticated member is attached to Stripe Checkout metadata and email',async()=>{
- const db=memberDb(),authEnv={...env,DB:db,GOOGLE_CLIENT_ID:'client.apps.googleusercontent.com',GOOGLE_CLIENT_SECRET:'secret',AUTH_REQUIRED:'true'};
- const baseReq=request('/api/auth/me'),setCookie=await issueMemberCookie('member_12345678',baseReq,authEnv),cookie=setCookie.split(';')[0];
+
+
+test('Stripe-only Checkout ignores legacy AUTH_REQUIRED and still requires buyer email',async()=>{
+ const stripeOnly={...env,AUTH_REQUIRED:'true'};
+ const missing=await checkout({request:request('/api/checkout',undefined,{accept_terms:true}),env:stripeOnly});
+ assert.equal(missing.status,400);
  const old=globalThis.fetch;let form;
  try{
-  globalThis.fetch=async(_url,opt)=>{form=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/member'}))};
-  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'other-billing@example.com'},{Cookie:cookie}),env:authEnv});
-  assert.equal(res.status,200);assert.equal(form.get('metadata[member_id]'),'member_12345678');assert.equal(form.get('subscription_data[metadata][member_id]'),'member_12345678');assert.equal(form.get('customer_email'),'buyer@example.com');
+  globalThis.fetch=async(_url,opt)=>{form=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/stripe-only'}))};
+  const res=await checkout({request:request('/api/checkout',undefined,{accept_terms:true,buyer_email:'buyer@example.com'}),env:stripeOnly});
+  assert.equal(res.status,200);assert.equal(form.get('customer_email'),'buyer@example.com');assert.equal(form.get('metadata[member_id]'),null);
  }finally{globalThis.fetch=old}
-});
-test('AUTH_REQUIRED entitlement uses member-linked D1 subscription and re-verifies with Stripe',async()=>{
- const row={stripe_subscription_id:'sub_test123',stripe_customer_id:'cus_test123',status:'active'};
- const db=memberDb(undefined,row),authEnv={...env,DB:db,GOOGLE_CLIENT_ID:'client.apps.googleusercontent.com',GOOGLE_CLIENT_SECRET:'secret',AUTH_REQUIRED:'true'};
- const setCookie=await issueMemberCookie('member_12345678',request('/api/auth/me'),authEnv),cookie=setCookie.split(';')[0];
- const old=globalThis.fetch;
- try{globalThis.fetch=async()=>new Response(JSON.stringify(sub));const res=await verify({request:request('/api/entitlement',undefined,null,{Cookie:cookie}),env:authEnv});const body=await res.json();assert.equal(body.active,true);assert.equal(body.status,'active')}
- finally{globalThis.fetch=old}
 });

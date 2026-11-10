@@ -1,2 +1,0 @@
-import {finishGoogleLogin} from '../../../server/auth.js';
-export async function onRequestGet({request,env}){try{const x=await finishGoogleLogin(request,env);const h=new Headers({Location:'/pro/?auth=ok','Cache-Control':'no-store'});h.append('Set-Cookie',x.cookie);h.append('Set-Cookie',x.clearState);return new Response(null,{status:302,headers:h})}catch{const h=new Headers({Location:'/pro/?auth=failed','Cache-Control':'no-store'});return new Response(null,{status:302,headers:h})}}

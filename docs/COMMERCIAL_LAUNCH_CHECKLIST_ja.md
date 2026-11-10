@@ -1,174 +1,127 @@
 # DemandScope 商用公開チェックリスト
 
-更新: 2026-11-09
+更新: 2026-11-10
 
 ## 現在の販売設計
 
 - Free: 0円
 - Pro: **月額980円**
 - 課金周期: 月額自動更新
-- 解約: Stripe Customer Portalから行い、原則として契約期間末で終了
 - 決済: Stripe Checkout
 - 契約管理: Stripe Customer Portal
-- 分析データ: 原則ブラウザ内処理。需要ファイル自体を決済サーバーへ送らない
-- Live課金: **まだOFF**。 `LIVE_BILLING_ENABLED=true` が最終スイッチ
+- 解約: 原則として現在の契約期間末で終了
+- 返金: 利用者都合の日割返金なし。二重請求・誤請求・サービス側の重大な決済不具合・法令上必要な場合は対応
+- 分析データ: 原則ブラウザ内処理
+- アプリ認証: **Google OAuthを使用しない**
+- Pro権限: Checkoutを開始したブラウザに署名Cookieを発行し、Stripe Subscriptionをサーバー側で再照合
+- 別端末復旧: 現時点では非対応。Stripe Customer Portalのメール認証は契約管理専用で、DemandScope本体のログインには使用しない
+- Live課金: `LIVE_BILLING_ENABLED=true` が最終スイッチ
 
 ## 完了済み
+
+### Stripe LIVE
+
+- Stripe本人確認: PASS
+- `charges_enabled=true`
+- `payouts_enabled=true`
+- `details_submitted=true`
+- Product: `DemandScope Pro`
+- Product ID: `prod_VbErdTf8qXvmSr`
+- Price: **JPY 980 / month**
+- Price ID: `price_1Ua2NWBGa8rL8jwIKk7Tbtas`
+- Product metadata: `app=demand-scope-pro`, `tier=pro`
+- Product statement descriptor: `DEMANDSCOPE`
+- Live Portal: `bpc_1UZqUZBGa8rL8jwIrmBsxuO0`
+- Live Portal login: `https://billing.stripe.com/p/login/7sYaEW1Q36DN9Km1GN93y00`
+- Live Webhook: `we_1UZqVxBGa8rL8jwIWuHw7CVK`
+- Live Webhook URL: `https://web-stock-78r.pages.dev/api/stripe-webhook`
+- TEST/LIVE key・Price・Portal・Webhookを分離
+- Checkout前にLive Priceを再取得し、Live / active / JPY / 980 / monthly / DemandScope metadataを検証
 
 ### アプリ / Cloudflare
 
 - GitHub main → Cloudflare Pages Production自動デプロイ
 - D1 Production binding `DB`
-- D1 schema: members / subscriptions / stripe_events / checkout_acceptances 等
-- Webhookの冪等保存
+- Stripe Webhook冪等保存
 - Webhook backlog監視
-- TEST/LIVEイベントの署名シークレット分離
-- TEST/LIVE subscriptionのlivemode分離
+- Checkout Sessionのブラウザ紐付け
+- Stripe Subscriptionの再照合
 - Free / Pro機能境界
-- PDF / CSVレポート
+- PDF / CSV
+- XLSX / CSV / TSV / TXT
 - 日本語 / 英語
-- XLSX / CSV / TSV / TXT読込
 - 4,000回Monte Carlo
-- 直近ボラティリティを長期で薄めない保守推定
-- GitHub Actions + Cloudflare build gate
+- Pro PDF総合所見・優先SKU・推奨アクション
+- GitHub Actions + Cloudflare deployment gate
 
-### Stripe TEST
+## Stripe-only認証方針
 
-- TEST Checkout E2E
-- Customer作成
-- Subscription作成
-- Pro権限反映
-- Customer Portal
-- cancel-at-period-end
-- Webhook persistence
-- 別購入者メールのCheckout引継ぎ
+Stripeに委託するもの:
 
-### Stripe LIVE準備
+- 決済時のカード認証
+- 購入者メールアドレス
+- Customer
+- Subscription
+- Customer Portalへのメールログイン
+- 支払方法変更
+- 請求書確認
+- 解約
 
-- Live Customer Portal:
-  `bpc_1UZqUZBGa8rL8jwIrmBsxuO0`
-- Live Portal login:
-  `https://billing.stripe.com/p/login/7sYaEW1Q36DN9Km1GN93y00`
-- Live Webhook:
-  `we_1UZqVxBGa8rL8jwIWuHw7CVK`
-- Live Webhook URL:
-  `https://web-stock-78r.pages.dev/api/stripe-webhook`
-- Live決済は専用Live key / Price / Portal / Webhookを使用
-- TESTとLIVEをコードで混在させない
-- Live PriceはCheckout前に次をサーバーで再照合:
-  - livemode=true
-  - active=true
-  - JPY
-  - **980円**
-  - month / interval_count=1
-  - Product metadata: `app=demand-scope-pro`, `tier=pro`
+DemandScope側に残すもの:
+
+- Checkoutを開始したブラウザとの照合
+- HttpOnly署名Cookie
+- Stripe Subscriptionのactive/trialing再検証
+- Webhookによる契約状態同期
+
+Stripe Customer Portalは**課金・契約管理の本人確認**であり、DemandScopeアプリ本体へのログイン認証ではない。メールアドレスを入力しただけで既存Subscriptionを復元する実装は禁止する。
 
 ## 本番公開を止めている残件
 
-### 1. Stripe本人確認
+### 1. Cloudflare LIVE Stripe Variables / Secrets
 
-Stripe accountは決済受付自体は可能だが、現時点では本人確認書類の要件により payout が停止している。
+Productionに設定:
 
-本番公開前にStripe Dashboardで本人確認書類を完了し、
+- `STRIPE_LIVE_SECRET_KEY` = Secret
+- `STRIPE_LIVE_PRO_PRICE_ID=price_1Ua2NWBGa8rL8jwIKk7Tbtas`
+- `STRIPE_LIVE_PORTAL_CONFIG_ID=bpc_1UZqUZBGa8rL8jwIrmBsxuO0`
+- `STRIPE_LIVE_PORTAL_LOGIN_URL=https://billing.stripe.com/p/login/7sYaEW1Q36DN9Km1GN93y00`
+- `STRIPE_LIVE_WEBHOOK_SECRET` = Secret
+- `REFUND_POLICY_CONFIRMED=true`
+- `LIVE_BILLING_ENABLED=false` のまま設定を完了する
 
-- charges_enabled=true
-- payouts_enabled=true
-- details_submitted=true
+Secret値はGitHub・README・チャットへ保存しない。
 
-をすべて満たすこと。
+### 2. Stripeアカウント公開表示
 
-### 2. DemandScope専用Live Product / Price
+アカウント既定のstatement descriptorに個人名が残っている。DemandScope Productには `DEMANDSCOPE` を設定済みでSubscriptionではProduct descriptorが優先されるが、日本のカード発行会社による表示差があるため、一般公開前にStripeの公開ブランド名・日本語明細表示を確認する。
 
-作成予定:
+### 3. 最終Live E2E
 
-- Product: DemandScope Pro
-- metadata:
-  - app=demand-scope-pro
-  - tier=pro
-- Price:
-  - JPY 980
-  - recurring monthly
-
-既存NamiData Product/Priceを流用しない。
-
-### 3. Google会員認証
-
-別端末・Cookie削除後にもPro権限を復元するため、本番ではGoogle OIDCを必須にする。
-
-Cloudflare Production:
-
-- GOOGLE_CLIENT_ID
-- GOOGLE_CLIENT_SECRET
-- AUTH_REQUIRED=true
-
-D1 member ↔ Stripe Customer ↔ Subscription が一致することをE2Eで確認する。
-
-### 4. Live Stripe Secrets / Variables
-
-Cloudflare Productionに設定:
-
-- STRIPE_LIVE_SECRET_KEY = Secret
-- STRIPE_LIVE_PRO_PRICE_ID = Variable
-- STRIPE_LIVE_PORTAL_CONFIG_ID = `bpc_1UZqUZBGa8rL8jwIrmBsxuO0`
-- STRIPE_LIVE_PORTAL_LOGIN_URL = Live Portal login URL
-- STRIPE_LIVE_WEBHOOK_SECRET = Secret
-- LIVE_BILLING_ENABLED = **最後までfalse**
-
-Live Webhook signing secretはGitHub・ドキュメント・チャットへ保存しない。
-
-### 5. 返金条件
-
-`REFUND_POLICY_CONFIRMED=true` にする前に、課金・解約ページと特商法表記の内容を最終確定する。
-
-### 6. 法務表示
-
-現状は事業者情報の「請求により遅滞なく開示」導線をreadinessが認識する構成。
-
-公開前に少なくとも以下を画面上で一致させる:
-
-- 月額980円
-- 月額自動更新
-- 決済後に提供開始
-- Stripe Portalから解約
-- 解約の効力発生日
-- 返金条件
-- 利用規約
-- プライバシー
-- 特商法表記
-
-## 最終Live切替手順
-
-**順序を変えない。**
-
-1. GitHub Actions PASS
-2. Cloudflare Production PASS
-3. PDF / CSV / XLSX実機QA PASS
-4. Stripe本人確認・payout PASS
-5. Live Product/Priceの980円検証 PASS
-6. Live Portal PASS
-7. Live Webhook Secret設定 PASS
-8. Google OAuth PASS
-9. member ↔ Customer ↔ Subscription E2E PASS
-10. 法務/返金表示 PASS
-11. `/api/commercial-readiness` の未達を解消
-12. 最後に `LIVE_BILLING_ENABLED=true`
-13. 少額の実カード本番Checkoutを1件実施
-14. Checkout → Pro権限 → Webhook → Portal → cancel を確認
-15. 問題なければ一般公開
+1. Cloudflare LIVE variables/secrets設定
+2. `/api/commercial-readiness` 確認
+3. `LIVE_BILLING_ENABLED=true`
+4. Stripe Checkoutが **DemandScope Pro / 980円 / 月額** と表示することを確認
+5. 実カードで1件だけ本番購入
+6. Checkout完了 → 同一ブラウザPro開放
+7. Webhook backlog=0
+8. Customer Portalを直接開ける
+9. Portalメールログインが購入メールで機能
+10. cancel_at_period_end
+11. 契約期間末までProが有効
+12. 次回請求停止を確認
 
 ## SALE_READY条件
 
-次を全部満たすまで `SALE_READY` としない。
-
 - GitHub Checks PASS
-- Cloudflare Pages PASS
-- `ready_for_live=true`
-- Live Price = JPY 980/month をサーバー再照合
+- Cloudflare Production PASS
+- Stripe Price = JPY 980/month
 - Stripe payout可能
-- Google認証済みmemberで購入
-- 別端末でPro復旧
+- Webhook署名検証PASS
 - Webhook backlog=0
-- PDF/CSV出力正常
-- 解約導線正常
-- 法務表示と実際の課金条件が一致
-
+- Checkoutブラウザ紐付けPASS
+- Subscription再照合PASS
+- PDF/CSV/XLSX PASS
+- 法務表示と実課金条件一致
+- Stripe公開表示に不要な個人情報・NamiData商品名の混入なし
+- Google OAuth依存なし

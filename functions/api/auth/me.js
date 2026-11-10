@@ -1,3 +1,0 @@
-import {json} from '../../../server/stripe.js';
-import {authConfigured,authenticatedMember} from '../../../server/auth.js';
-export async function onRequestGet({request,env}){const configured=authConfigured(env);if(!configured)return json({configured:false,authenticated:false,required:env?.AUTH_REQUIRED==='true'});try{const member=await authenticatedMember(request,env);return json({configured:true,authenticated:!!member,required:env?.AUTH_REQUIRED==='true',member:member?{id:member.id,email:member.email}:null})}catch{return json({configured:true,authenticated:false,required:env?.AUTH_REQUIRED==='true',error:'Authentication state could not be read.'},503)}}

@@ -1,2 +1,0 @@
-import {beginGoogleLogin} from '../../../server/auth.js';
-export async function onRequestGet({request,env}){try{const x=await beginGoogleLogin(request,env);return new Response(null,{status:302,headers:{Location:x.url,'Set-Cookie':x.cookie,'Cache-Control':'no-store'}})}catch{return new Response('Google login is not configured.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}})}}

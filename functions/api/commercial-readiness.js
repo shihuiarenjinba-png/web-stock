@@ -1,5 +1,4 @@
 import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId,verifyLivePrice,LIVE_MONTHLY_JPY} from '../../server/stripe.js';
-import {authConfigured} from '../../server/auth.js';
 import {DEFAULT_DISCLOSURE_REQUEST_URL} from '../../server/legal.js';
 
 export async function onRequestGet({env}){
@@ -27,7 +26,6 @@ export async function onRequestGet({env}){
   refund_policy_confirmed:env.REFUND_POLICY_CONFIRMED==='true',
   support_channel:!!env.SUPPORT_EMAIL||!!env.SUPPORT_URL||disclosureOnRequest
  };
- const auth={google_client_id:!!env.GOOGLE_CLIENT_ID,google_client_secret:!!env.GOOGLE_CLIENT_SECRET,configured:authConfigured(env),required:env?.AUTH_REQUIRED==='true'};
  const testWebhook=typeof (env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET)==='string'&&(env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET).startsWith('whsec_');
  const liveWebhook=typeof env.STRIPE_LIVE_WEBHOOK_SECRET==='string'&&env.STRIPE_LIVE_WEBHOOK_SECRET.startsWith('whsec_');
  let account={checked:false,charges_enabled:null,payouts_enabled:null,details_submitted:null,error:null};
@@ -54,15 +52,16 @@ export async function onRequestGet({env}){
   live_price:livePrice
  };
  const readyForBillingTest=mode==='test'&&billing.stripe_configured&&testWebhook&&billing.d1_binding&&billing.d1_schema_ok;
- const readyForUnattendedTest=readyForBillingTest&&auth.configured;
+ const readyForUnattendedTest=readyForBillingTest;
  const legalReady=(legal.explicit_operator_details||legal.disclosure_on_request)&&legal.refund_policy_confirmed&&legal.support_channel;
- const readyForLive=mode==='live'&&billing.stripe_configured&&liveWebhook&&billing.d1_binding&&billing.d1_schema_ok&&webhookBacklog===0&&auth.configured&&auth.required&&legalReady&&livePrice.verified===true&&account.charges_enabled===true&&account.payouts_enabled===true&&account.details_submitted===true;
+ const readyForLive=mode==='live'&&billing.stripe_configured&&liveWebhook&&billing.d1_binding&&billing.d1_schema_ok&&webhookBacklog===0&&legalReady&&livePrice.verified===true&&account.charges_enabled===true&&account.payouts_enabled===true&&account.details_submitted===true;
  const notes=[];
  if(mode!=='live')notes.push('Live billing is still gated off.');
  if(!priceId&&mode==='live')notes.push('A live recurring Stripe Price ID is required.');
  if(mode==='live'&&livePrice.checked&&!livePrice.verified)notes.push('Live Price must be an active DemandScope Pro JPY 980 monthly price.');
- if(!auth.configured||!auth.required)notes.push('Authenticated member mapping is required for cross-device paid access.');
  if(!legal.refund_policy_confirmed)notes.push('Refund policy must be explicitly confirmed before live sales.');
  if(mode==='live'&&account.checked&&account.payouts_enabled!==true)notes.push('Stripe payouts must be enabled before live launch.');
- return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,auth,legal,notes});
+ const access={provider:'stripe',checkout_browser_activation:true,customer_portal_email_login:true,cross_device_app_login:false};
+ notes.push('Stripe Customer Portal authenticates billing management, not DemandScope application login. Cross-device Pro restoration is intentionally unsupported without a separate app identity provider.');
+ return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,access,legal,notes});
 }

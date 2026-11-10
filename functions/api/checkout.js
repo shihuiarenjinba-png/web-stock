@@ -1,6 +1,5 @@
 import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError,billingMode,activePriceId,verifyLivePrice} from '../../server/stripe.js';
 import {LEGAL_VERSION} from '../../server/legal.js';
-import {authConfigured,authenticatedMember} from '../../server/auth.js';
 function validBuyerEmail(value){return typeof value==='string'&&value.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)}
 export async function onRequestPost({request,env}){
  const mode=billingMode(env),priceId=activePriceId(env);
@@ -8,18 +7,14 @@ export async function onRequestPost({request,env}){
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
  let input={};try{input=await request.json()}catch{}
  if(input?.accept_terms!==true)return json({error:'利用規約・プライバシーポリシー・課金条件への同意が必要です。'},400);
- let member=null;
- if(authConfigured(env)){try{member=await authenticatedMember(request,env)}catch{}}
- if(env?.AUTH_REQUIRED==='true'&&!member)return json({error:'Googleログインが必要です。'},401);
- const buyerEmail=member?.email||String(input?.buyer_email||'').trim().toLowerCase();
- if(!member&&!validBuyerEmail(buyerEmail))return json({error:'購入者メールアドレスを正しく入力してください。'},400);
+ const buyerEmail=String(input?.buyer_email||'').trim().toLowerCase();
+ if(!validBuyerEmail(buyerEmail))return json({error:'購入者メールアドレスを正しく入力してください。'},400);
  try{if(mode==='live'){const verified=await verifyLivePrice(env);if(!verified.ok)return json({error:'本番価格設定を安全に確認できません。',detail:'DemandScope Pro は月額980円のLive Priceとして確認できるまで決済を開始しません。',price_check:verified.reason},503)}const site=origin(env,request);const state=await checkoutBrowserState(env,site.startsWith('https:'));const session=await stripe(env,'/checkout/sessions',{
  mode:'subscription',client_reference_id:state.reference, 'line_items[0][quantity]':'1',
  success_url:`${site}/pro/?session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${site}/pro/?checkout=cancelled`,
  'metadata[app]':'demand-scope-pro', 'metadata[legal_version]':LEGAL_VERSION, 'metadata[legal_accepted_at]':String(Math.floor(Date.now()/1000)),
  'subscription_data[metadata][app]':'demand-scope-pro', 'subscription_data[metadata][legal_version]':LEGAL_VERSION,
- ...(member?{'metadata[member_id]':member.id,'subscription_data[metadata][member_id]':member.id}:{}),
- ...(member?.stripe_customer_id?{customer:member.stripe_customer_id}:{customer_email:buyerEmail}),
+ customer_email:buyerEmail,
  'payment_method_types[0]':'card',
  'wallet_options[link][display]':'never',
  ...(priceId?{'line_items[0][price]':priceId}:{

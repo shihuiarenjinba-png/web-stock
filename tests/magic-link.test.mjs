@@ -64,10 +64,12 @@ test('active Stripe subscription triggers the shared gateway',async()=>{
   };
   const res=await requestMagic({request:browserRequest('/api/magic-link/request',{email:'buyer@example.com'}),env});
   assert.equal(res.status,202);assert.equal(gatewayRequest.body.email,'buyer@example.com');assert.equal(gatewayRequest.headers['x-auth-mail-app'],'demandscope');
+  assert.match(gatewayRequest.body.state,/^[A-Za-z0-9_-]{40,96}$/);
+  assert.match(res.headers.get('Set-Cookie'),new RegExp(`demand_magic_state=${gatewayRequest.body.state}`));
  }finally{globalThis.fetch=old}
 });
 
-test('callback consumes gateway assertion then re-verifies Stripe before issuing Pro cookie',async()=>{
+test('callback requires matching browser state, then re-verifies Stripe before issuing Pro cookie',async()=>{
  const old=globalThis.fetch;
  try{
   globalThis.fetch=async(url,opt)=>{
@@ -78,10 +80,15 @@ test('callback consumes gateway assertion then re-verifies Stripe before issuing
    if(s.includes('api.stripe.com/v1/subscriptions/sub_magic123'))return new Response(JSON.stringify(subscription));
    throw new Error('unexpected '+s);
   };
-  const code='A'.repeat(43);
-  const res=await callbackMagic({request:browserRequest('/api/magic-link/callback?code='+code),env});
+  const code='A'.repeat(43),state='B'.repeat(43);
+  const request=new Request('http://localhost:8788/api/magic-link/callback?code='+code+'&state='+state,{headers:{Cookie:'demand_magic_state='+state}});
+  const res=await callbackMagic({request,env});
   assert.equal(res.status,302);assert.match(res.headers.get('Location'),/\/pro\/\?magic=ok$/);
   assert.match(res.headers.get('Set-Cookie'),/demand_pro=/);
+
+  const bad=new Request('http://localhost:8788/api/magic-link/callback?code='+code+'&state='+'C'.repeat(43),{headers:{Cookie:'demand_magic_state='+state}});
+  const rejected=await callbackMagic({request:bad,env});
+  assert.equal(rejected.status,302);assert.match(rejected.headers.get('Location'),/\/pro\/\?magic=invalid$/);
  }finally{globalThis.fetch=old}
 });
 

@@ -8,7 +8,11 @@ STRIPE_SECRET_KEY=rk_test_REPLACE_ME
 
 # Shared
 SESSION_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_CHARACTERS
+# Local development. Production should become the exact custom HTTPS origin when the domain is ready.
 APP_ORIGIN=http://localhost:8788
+# Production example: APP_ORIGIN=https://demand.YOUR_DOMAIN
+DOMAIN_CUTOVER_ENFORCED=false
+STRIPE_DOMAIN_URLS_CONFIRMED=false
 
 # LIVE — keep disabled until all launch gates pass.
 # LIVE_BILLING_ENABLED=false

@@ -18,12 +18,8 @@ APP_ORIGIN=http://localhost:8788
 # STRIPE_LIVE_PORTAL_LOGIN_URL=https://billing.stripe.com/p/login/7sYaEW1Q36DN9Km1GN93y00
 # STRIPE_LIVE_WEBHOOK_SECRET=whsec_LIVE_REPLACE_ME
 
-# Member identity. Required before LIVE_BILLING_ENABLED=true.
-# GOOGLE_CLIENT_ID=REPLACE_ME.apps.googleusercontent.com
-# GOOGLE_CLIENT_SECRET=REPLACE_ME
-# AUTH_REQUIRED=false
 
 # Commercial/legal gates.
-# REFUND_POLICY_CONFIRMED=false
+# REFUND_POLICY_CONFIRMED=true
 # LEGAL_DISCLOSURE_URL=https://namidata-lab-public.lingering-salad-74bc.workers.dev/legal/disclosure-request
 # SUPPORT_URL=https://...

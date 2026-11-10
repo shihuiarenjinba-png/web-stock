@@ -51,8 +51,9 @@ async function gatewayPost(env,path,body){
  return data;
 }
 
-export async function requestGatewayMagicLink(env,email){
- return gatewayPost(env,'/v1/magic-link/request',{email});
+export async function requestGatewayMagicLink(env,email,state){
+ if(typeof state!=='string'||!/^[A-Za-z0-9_-]{40,96}$/.test(state))throw new Error('Invalid recovery state');
+ return gatewayPost(env,'/v1/magic-link/request',{email,state});
 }
 
 export async function consumeGatewayAssertion(env,code){

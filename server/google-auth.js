@@ -61,7 +61,7 @@ function cookie(request,name){
 }
 function secureFor(request,env){return origin(env,request).startsWith('https:')}
 function cookieLine(name,value,{maxAge,path='/',secure=true}={}){
- return \`\${name}=\${value}; Path=\${path}; Max-Age=\${maxAge}; HttpOnly; SameSite=Lax\${secure?'; Secure':''}\`;
+ return `${name}=${value}; Path=${path}; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure?'; Secure':''}`;
 }
 export function clearGoogleFlowCookie(request,env){return cookieLine(FLOW_COOKIE,'',{maxAge:0,path:'/api/auth/google',secure:secureFor(request,env)})}
 export function clearIdentityCookie(request,env){return cookieLine(IDENTITY_COOKIE,'',{maxAge:0,path:'/',secure:secureFor(request,env)})}

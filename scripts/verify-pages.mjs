@@ -27,6 +27,8 @@ const required = [
   'server/legal.js',
   'server/access.js',
   'server/magic-link.js',
+  'server/subscription-lookup.js',
+  'server/auth-mail-gateway.js',
   'migrations/0001_commercial_core.sql',
   'migrations/0002_checkout_acceptance.sql',
   'migrations/0003_member_stripe_link.sql',
@@ -42,6 +44,7 @@ const required = [
   'functions/api/magic-link/request.js',
   'functions/api/magic-link/verify.js',
   'functions/api/magic-link/status.js',
+  'functions/api/magic-link/callback.js',
 ];
 for (const path of required) {
   const full = resolve(root, path);

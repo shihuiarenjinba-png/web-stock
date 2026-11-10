@@ -12,12 +12,12 @@ test('pages.dev and workers.dev do not count as final custom domains',()=>{
  assert.equal(domainStatus({APP_ORIGIN:'https://web-stock.example.workers.dev'}).custom_domain,false);
 });
 test('canonical app origin wins over the request host for Stripe return URLs',()=>{
- const env={APP_ORIGIN:'https://demand.example.com'};
+ const env={APP_ORIGIN:'https://demand.example.com',STRIPE_DOMAIN_URLS_CONFIRMED:'true'};
  const req=new Request('https://legacy.pages.dev/api/checkout');
  assert.equal(canonicalOrRequestOrigin(env,req),'https://demand.example.com');
 });
 test('domain enforcement rejects legacy-host commercial requests after cutover',()=>{
- const env={APP_ORIGIN:'https://demand.example.com',DOMAIN_CUTOVER_ENFORCED:'true'};
+ const env={APP_ORIGIN:'https://demand.example.com',STRIPE_DOMAIN_URLS_CONFIRMED:'true',DOMAIN_CUTOVER_ENFORCED:'true'};
  assert.equal(requestAllowedForDomainCutover(env,new Request('https://legacy.pages.dev/api/checkout')),false);
  assert.equal(requestAllowedForDomainCutover(env,new Request('https://demand.example.com/api/checkout')),true);
 });
@@ -28,5 +28,6 @@ test('domain readiness also requires Stripe dashboard URL confirmation',()=>{
 });
 test('path-bearing and insecure public origins fail closed',()=>{
  assert.equal(configuredAppOrigin({APP_ORIGIN:'https://example.com/app'}),null);
+ assert.equal(configuredAppOrigin({APP_ORIGIN:'https://example.com/'}),null);
  assert.equal(configuredAppOrigin({APP_ORIGIN:'http://example.com'}),null);
 });

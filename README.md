@@ -6,6 +6,14 @@
 
 会計機能を含まない、過去需要の残差標準偏差と4,000回のモンテカルロ試行による需要・在庫リスクの意思決定支援Webアプリです。需要データの読み込み・計算・CSVレポート出力はすべてブラウザ内で実行し、サーバーへ送信しません。
 
+## 認証方針更新（2026-11-10）
+
+DemandScope本番では**Google OAuthを使用しません**。決済・契約管理はStripe Checkout / Customer Portalへ委託します。Pro権限はCheckout開始ブラウザに発行するHttpOnly署名CookieとStripe Subscriptionのサーバー再照合で判定します。
+
+Stripe Customer Portalのメールログインは契約管理用であり、DemandScope本体へのログインではありません。そのため、別端末・Cookie削除後のPro自動復旧は現時点では非対応です。メールアドレスだけを入力して既存契約を復元する危険な実装は行いません。
+
+現在のLive Productは `DemandScope Pro`、Live Priceは `price_1Ua2NWBGa8rL8jwIKk7Tbtas`（JPY 980 / month）です。NamiDataの商品・Priceは流用しません。
+
 ## 現在の商用公開準備（2026-11-09）
 
 - Pro本番価格: **月額980円**
@@ -173,6 +181,6 @@ npx wrangler pages dev public --port 8788
 - Stripe Webhook: 署名検証後、D1にイベントを冪等保存しsubscription状態を同期
 - DB未接続時はWebhookを503で拒否し、Stripeのretryを失わない
 - /api/commercial-readiness で、D1・Webhook・認証・法務情報の準備状況を秘密値なしで確認可能
-- Live billingは引き続き無効。Google OIDC + member/Stripe Customer紐付け、事業者情報、最終価格・税設定、実E2E完了後に別ゲートで解禁する
+- Live billingは引き続き無効。Stripe-only Checkout/Subscription再照合、事業者情報、最終価格・税設定、実E2E完了後に別ゲートで解禁する
 
 手動設定残件は docs/COMMERCIAL_LAUNCH_CHECKLIST_ja.md を参照。

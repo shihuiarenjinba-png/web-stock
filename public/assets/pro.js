@@ -4,7 +4,7 @@ import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './imp
 import {initI18n,lang,t,errorMessage} from './i18n.js';
 import {printRiskReport} from './pdf-report.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
-let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null;
+let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null,googleSession=null;
 const KEY='demandscope_pro_skus_v1';
 function liveBilling(){return stripeHealth?.mode==='live'}
 function applyBillingMode(){
@@ -49,16 +49,40 @@ async function checkStripeHealth(){
 async function checkMagicLinkStatus(){
  try{const res=await fetch('/api/magic-link/status',{cache:'no-store'});const state=await res.json();$('magicLinkRecovery')?.classList.toggle('hidden',!state.available);return state}catch{$('magicLinkRecovery')?.classList.add('hidden');return {available:false}}
 }
-async function boot(){try{await checkStripeHealth();await checkMagicLinkStatus();const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(liveBilling()?(lang()==='en'?'Payment verified':'決済を確認しました'):(lang()==='en'?'Test checkout verified':'テスト決済を確認しました'));}
+async function checkGoogleSession(){
+ try{
+  const res=await fetch('/api/auth/session',{cache:'no-store',credentials:'same-origin'});
+  googleSession=await res.json();
+ }catch{googleSession={configured:false,authenticated:false,issues:['unreachable']}}
+ const state=$('googleAuthState'),login=$('googleLogin'),logout=$('googleLogout'),checkout=$('checkout');
+ if(!state)return googleSession;
+ if(!googleSession.configured){
+   state.textContent=lang()==='en'?'Google login is waiting for the Cloudflare client secret.':'GoogleログインはCloudflareへのClient Secret登録待ちです。';
+   login?.classList.add('hidden');logout?.classList.add('hidden');
+ }else if(googleSession.authenticated){
+   state.textContent=(lang()==='en'?'Signed in with Google: ':'Googleでログイン中: ')+(googleSession.member?.email||'');
+   login?.classList.add('hidden');logout?.classList.remove('hidden');
+   if($('buyerEmail')&&!$('buyerEmail').value&&googleSession.member?.email)$('buyerEmail').value=googleSession.member.email;
+ }else{
+   state.textContent=lang()==='en'?'Sign in with Google to verify your identity before purchasing or restoring Pro.':'購入・Pro復旧の前にGoogleで本人確認してください。';
+   login?.classList.remove('hidden');logout?.classList.add('hidden');
+ }
+ if(checkout&&googleSession.configured&&!googleSession.authenticated)checkout.disabled=true;
+ return googleSession;
+}
+async function boot(){try{await checkStripeHealth();await checkGoogleSession();await checkMagicLinkStatus();const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(liveBilling()?(lang()==='en'?'Payment verified':'決済を確認しました'):(lang()==='en'?'Test checkout verified':'テスト決済を確認しました'));}
  if(params.get('checkout')==='cancelled'){history.replaceState({},'',location.pathname);warn('決済はキャンセルされました。');}
  if(params.get('magic')==='ok'){history.replaceState({},'',location.pathname);toast(lang()==='en'?'Pro access restored on this browser':'このブラウザでPro契約を復旧しました');}
  if(params.get('magic')==='invalid'){history.replaceState({},'',location.pathname);warn(lang()==='en'?'This login link is invalid or expired.':'本人確認リンクが無効または期限切れです。');}
  if(params.get('magic')==='unavailable'){history.replaceState({},'',location.pathname);warn(lang()==='en'?'Email login is not configured yet.':'メール認証は現在準備中です。');}
+ if(params.get('google')==='ok'){history.replaceState({},'',location.pathname);toast(lang()==='en'?'Google identity verified':'Google本人認証が完了しました');await checkGoogleSession();}
+ if(params.get('google')==='cancelled'){history.replaceState({},'',location.pathname);warn(lang()==='en'?'Google sign-in was cancelled.':'Googleログインはキャンセルされました。');}
+ if(params.get('google')==='invalid'){history.replaceState({},'',location.pathname);warn(lang()==='en'?'Google sign-in could not be verified.':'Googleログインを安全に確認できませんでした。');}
  const res=await fetch('/api/entitlement',{cache:'no-store'});
  if(!res.ok){access(false,true);warn(liveBilling()?(lang()==='en'?'Pro requires Cloudflare Pages Functions and Stripe live configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripe本番設定が必要です。'):(lang()==='en'?'Pro requires deployment of Cloudflare Pages Functions and Stripe test configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripeテスト設定のデプロイが必要です。'));return;}
  const state=await res.json();access(!!state.active,state.configured===false);if(state.configured===false&&state.missing?.length)warn((lang()==='en'?'Setup needed: ':'設定が必要です: ')+state.missing.join(', '));if(state.error)warn(state.error);
  }catch(e){access(false,false);warn(e.message)} }
-function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(liveBilling()?(lang()==='en'?'✓ Subscription verified':'✓ Pro契約を確認しました'):(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました')):(liveBilling()?(lang()==='en'?'🔒 Start Pro with Stripe':'🔒 Stripe決済で利用開始'):t('🔒 Stripe テスト決済で利用開始'));$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(liveBilling()?(lang()==='en'?'After a verified Stripe subscription, bulk import is unlocked.':'Stripe Checkoutで契約状態を確認後、機能が開放されます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。'));$('checkout').disabled=unconfigured;if(unconfigured)$('accessText').textContent=liveBilling()?(lang()==='en'?'Configure the Stripe LIVE key, live Price ID, and session secret on Cloudflare Pages.':'Cloudflare Pagesに本番Stripeキー・本番Price ID・セッション秘密値を設定してください。'):(lang()==='en'?'Configure the Stripe TEST secret key and session secret on Cloudflare Pages.':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。');applyBillingMode();if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
+function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(liveBilling()?(lang()==='en'?'✓ Subscription verified':'✓ Pro契約を確認しました'):(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました')):(liveBilling()?(lang()==='en'?'🔒 Start Pro with Stripe':'🔒 Stripe決済で利用開始'):t('🔒 Stripe テスト決済で利用開始'));$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(liveBilling()?(lang()==='en'?'After a verified Stripe subscription, bulk import is unlocked.':'Stripe Checkoutで契約状態を確認後、機能が開放されます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。'));$('checkout').disabled=unconfigured;if(unconfigured)$('accessText').textContent=liveBilling()?(lang()==='en'?'Configure the Stripe LIVE key, live Price ID, and session secret on Cloudflare Pages.':'Cloudflare Pagesに本番Stripeキー・本番Price ID・セッション秘密値を設定してください。'):(lang()==='en'?'Configure the Stripe TEST secret key and session secret on Cloudflare Pages.':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。');applyBillingMode();if(googleSession?.configured&&!googleSession?.authenticated){$('checkout').disabled=true;$('accessText').textContent=lang()==='en'?'Verify your identity with Google before starting Stripe Checkout.':'Stripe決済の前にGoogleで本人確認してください。';}if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
 $('checkout').addEventListener('click',async()=>{
  clearWarn();$('checkoutError').classList.add('hidden');const button=$('checkout');const original=button.textContent;button.disabled=true;button.textContent=lang()==='en'?'Connecting to Stripe…':'Stripeに接続中…';
  try{
@@ -72,6 +96,7 @@ $('checkout').addEventListener('click',async()=>{
 $('portal').addEventListener('click',async()=>{try{const x=await call('/api/portal');location.assign(x.url)}catch(e){warn(e.message)}});
 $('sendMagicLink')?.addEventListener('click',async()=>{const email=$('recoveryEmail')?.value.trim()||'';const button=$('sendMagicLink'),message=$('magicLinkMessage');if(!$('recoveryEmail')?.checkValidity()||!email){message.textContent=lang()==='en'?'Enter the email used for purchase.':'購入時のメールアドレスを入力してください。';return}const original=button.textContent;button.disabled=true;button.textContent=lang()==='en'?'Sending…':'送信中…';try{const x=await call('/api/magic-link/request',{email});message.textContent=x.message|| (lang()==='en'?'If an active subscription exists, a login link will be sent.':'有効な契約が確認できる場合、本人確認リンクを送信します。')}catch(e){message.textContent=e.message||String(e)}finally{button.disabled=false;button.textContent=original}});
 $('logout').addEventListener('click',async()=>{try{await call('/api/logout');access(false,false);toast('この端末のProセッションからサインアウトしました')}catch(e){warn(e.message)}});
+$('googleLogout')?.addEventListener('click',async()=>{try{await call('/api/logout');googleSession={configured:true,authenticated:false};access(false,false);await checkGoogleSession();toast(lang()==='en'?'Signed out':'Googleからログアウトしました')}catch(e){warn(e.message)}});
 $('addToggle').addEventListener('click',()=>showEditor());$('cancelEdit').addEventListener('click',()=>{$('skuForm').classList.add('hidden');editing=null});
 function showEditor(sku=null){editing=sku?.id??null;$('skuForm').reset();$('skuName').value=sku?.name||'';$('skuLead').value=sku?.lead??7;$('skuStock').value=sku?.stock??'';$('skuService').value=sku?.service??95;$('skuMethod').value=sku?.method||'sma';$('skuWindow').value=sku?.window??7;$('skuData').value=sku?.data||'';$('saveSku').textContent=editing?(lang()==='en'?'Save changes':'変更を保存'):t('商品を保存');$('skuForm').classList.remove('hidden');$('skuName').focus()}
 function analyzeSku(s){return analyze({demand:parseDemand(s.data),leadTime:s.lead,service:s.service,inventory:s.stock,method:s.method,window:s.window})}

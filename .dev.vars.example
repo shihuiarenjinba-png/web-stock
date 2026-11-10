@@ -30,3 +30,9 @@ APP_ORIGIN=http://localhost:8788
 # AUTH_MAIL_GATEWAY_URL=https://auth.YOUR_OWN_DOMAIN
 # AUTH_MAIL_APP_ID=demandscope
 # AUTH_MAIL_APP_SECRET=REPLACE_WITH_A_UNIQUE_32_PLUS_CHAR_RANDOM_SECRET
+
+# Google OAuth / OpenID Connect — DemandScope Web client is pinned in server code.
+# Public client ID (optional explicit match check):
+GOOGLE_OAUTH_CLIENT_ID=175542619333-3ilgeia6pa4dglofipc3f20vdqgod4ju.apps.googleusercontent.com
+# Secret: obtain from Google Auth Platform and store only in Cloudflare Secret / local .dev.vars.
+GOOGLE_OAUTH_CLIENT_SECRET=REPLACE_WITH_GOOGLE_CLIENT_SECRET

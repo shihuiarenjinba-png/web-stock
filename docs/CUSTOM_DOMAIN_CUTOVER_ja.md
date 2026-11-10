@@ -6,7 +6,7 @@
 
 コードは `APP_ORIGIN` を正規URLとして使えます。
 
-`APP_ORIGIN` が設定されると、Stripe Checkoutの成功/キャンセル戻り先とStripe Customer Portalの戻り先は、その正規URLを優先します。
+`APP_ORIGIN` を独自HTTPS originに設定し、Stripe Dashboard側のURL更新確認後に `STRIPE_DOMAIN_URLS_CONFIRMED=true` とすると、Stripe Checkoutの成功/キャンセル戻り先とStripe Customer Portalの戻り先は、その正規URLを優先します。確認前は既存ホストを使い続け、古い `APP_ORIGIN` だけで戻り先を壊さない設計です。
 
 独自ドメイン移行が完了するまで:
 

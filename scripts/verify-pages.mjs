@@ -26,9 +26,11 @@ const required = [
   'server/subscription-store.js',
   'server/legal.js',
   'server/access.js',
+  'server/magic-link.js',
   'migrations/0001_commercial_core.sql',
   'migrations/0002_checkout_acceptance.sql',
   'migrations/0003_member_stripe_link.sql',
+  'migrations/0004_magic_link_tokens.sql',
   'functions/api/checkout.js',
   'functions/api/activate.js',
   'functions/api/entitlement.js',
@@ -37,6 +39,9 @@ const required = [
   'functions/api/logout.js',
   'functions/api/stripe-webhook.js',
   'functions/api/commercial-readiness.js',
+  'functions/api/magic-link/request.js',
+  'functions/api/magic-link/verify.js',
+  'functions/api/magic-link/status.js',
 ];
 for (const path of required) {
   const full = resolve(root, path);
@@ -73,3 +78,4 @@ if (!/id="buyerEmail"/.test(proHtml)) throw new Error('Pro checkout must collect
 if (!/10分以上届かない場合/.test(proHtml)) throw new Error('Pro surface must explain Stripe portal email delay and recovery guidance.');
 if (!/未購入のメールアドレスには送られません/.test(proHtml)) throw new Error('Pro surface must explain that portal email requires a completed purchase for that email.');
 if (!/DemandScope本体へのログイン機能ではありません/.test(proHtml)) throw new Error('Pro surface must distinguish Stripe billing authentication from app login.');
+if (!/id="magicLinkRecovery"/.test(proHtml)) throw new Error('Pro surface must include optional cross-device magic-link recovery UI.');

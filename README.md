@@ -8,9 +8,11 @@
 
 ## 認証方針更新（2026-11-10）
 
-DemandScope本番では**Google OAuthを使用しません**。決済・契約管理はStripe Checkout / Customer Portalへ委託します。Pro権限はCheckout開始ブラウザに発行するHttpOnly署名CookieとStripe Subscriptionのサーバー再照合で判定します。
+DemandScope本番では**Google OAuthを本人認証だけに使用**します。Googleの安定ID `sub` をD1上の内部memberへ紐付け、決済・契約・Pro権限の権威は引き続きStripe Checkout / Subscription / Customer Portalです。**Googleログイン成功だけでProにはしません。**
 
-Stripe Customer Portalのメールログインは契約管理用であり、DemandScope本体へのログインではありません。そのため、別端末・Cookie削除後のPro自動復旧は現時点では非対応です。メールアドレスだけを入力して既存契約を復元する危険な実装は行いません。
+Pro権限は、(1) Checkout開始ブラウザのHttpOnly署名CookieとStripe Subscription再照合、または (2) Google認証済み内部memberに紐付いたStripe Customer / active・trialing Subscriptionの再照合で判定します。メールアドレス文字列だけを根拠にProを復元しません。
+
+Stripe Customer Portalのメールログインは契約管理用です。別端末ではGoogle本人認証後、内部memberとStripe Customerの紐付けが確認できた場合にPro権限を再検証します。
 
 現在のLive Productは `DemandScope Pro`、Live Priceは `price_1Ua2NWBGa8rL8jwIKk7Tbtas`（JPY 980 / month）です。NamiDataの商品・Priceは流用しません。
 
@@ -24,7 +26,7 @@ Stripe Customer Portalのメールログインは契約管理用であり、Dema
 - Pro PDFは全体サマリー＋SKU別詳細＋分布図＋実際の分析警告を出力
 - 本番公開の残件は [商用公開チェックリスト](docs/COMMERCIAL_LAUNCH_CHECKLIST_ja.md) を参照
 
-> 現在は安全のためLive課金スイッチをOFFにしています。Stripe本人確認、Google会員認証、Live Product/Price、法務/返金条件、Live secretsの設定が完了するまで一般向け実課金は開始しません。
+> 現在は安全のためLive課金スイッチをOFFにしています。Google本人認証、Stripe Customer/Subscription紐付け、Live Product/Price、法務/返金条件、Live secrets、最終Live E2Eが完了するまで一般向け実課金は開始しません。
 
 
 ## できること
@@ -39,7 +41,7 @@ Stripe Customer Portalのメールログインは契約管理用であり、Dema
 | シミュレーション | 4,000回、平均・SD・P50/P90/P95/P99・安全在庫・発注点・欠品確率・直近z値 | 各SKUを4,000回実行、一覧比較 |
 | レポート | 最大2系列の簡易**CSV** | 全登録系列の比較**CSV**、全体サマリー＋SKU別詳細＋分布図＋注意事項の**PDF** |
 | 制限 | 2系列 | 最大200 SKU、ブラウザ保存容量に依存 |
-| 認証 | 不要 | TESTではStripe契約確認。本番はGoogle会員ID＋Stripe Subscriptionを使用 |
+| 認証 | 不要 | ProはGoogle本人認証＋Stripe Subscriptionを使用。Google単独ではProにならない |
 | データ保存 | 画面内のみ | ブラウザの`localStorage`のみ。クラウド同期・自動バックアップなし |
 
 **注意：アップロードされたExcel自体を再配布する機能ではありません。出力するのは分析結果CSV/TXTです。** CSVはExcelで開けます。旧形式`.xls`は未対応です。Excel内の数式は実行せず、ファイルに保存されている計算済み値のみ読みます。
@@ -121,7 +123,7 @@ npx wrangler pages dev public --port 8788
 
 `npm test`ではモンテカルロ計算・CSV読込・行列検出・安全なCSV書き出し・Stripe APIモックなど18件を自動テスト。追加でChromium上のブラウザ内モジュール結合確認（FreeのCSV/XLSX、日英切替、モバイル、Pro多系列インポート、レポートDL）を実施。**Proのブラウザ試験は契約確認APIをモックしたもので、実決済試験ではありません。Cloudflareへの本番デプロイも未実施です。**
 
-販売開始前には、少なくとも**購入者の本人認証（メールOTP等）とStripe Customer ID紐づけ、Stripe Webhookによる冪等な契約状態同期、顧客データのバックアップ/復元、規約・プライバシーポリシー・サポート対応、税区分・価格決定、テストカード決済実地検証**を追加してください。現行のPro権限はテスト用のCheckout Session IDと署名Cookieに基づくパイロットであり、Session ID漏洩による第三者でのアクセスの懸念があるため**そのまま実販売しないでください**。
+販売開始前には、**Google OAuth本人認証とStripe Customer/Subscription紐付けの実地確認、Stripe Webhookの冪等同期、法務・サポート表示、税区分、Live Checkout/Portal/解約E2E**を完走してください。現行コードはGoogle本人認証とStripe権限を分離しており、Google単独・メール文字列単独ではProを付与しません。
 
 公式資料：
 - https://developers.cloudflare.com/pages/functions/get-started/

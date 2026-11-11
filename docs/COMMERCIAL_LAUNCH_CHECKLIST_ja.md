@@ -12,9 +12,10 @@
 - 解約: 原則として現在の契約期間末で終了
 - 返金: 利用者都合の日割返金なし。二重請求・誤請求・サービス側の重大な決済不具合・法令上必要な場合は対応
 - 分析データ: 原則ブラウザ内処理
-- アプリ認証: **Google OAuthを使用しない**
-- Pro権限: Checkoutを開始したブラウザに署名Cookieを発行し、Stripe Subscriptionをサーバー側で再照合
-- 別端末復旧: 現時点では非対応。Stripe Customer Portalのメール認証は契約管理専用で、DemandScope本体のログインには使用しない
+- アプリ本人認証: **Google OAuth（openid email profile）**
+- 権限元: **Stripe Subscription**。Googleログイン成功だけではProにしない
+- Pro権限: Checkout開始ブラウザの署名Cookie＋Stripe再照合、またはGoogle `sub`→内部member→Stripe Customer/Subscriptionの再照合
+- 別端末復旧: Google本人認証後、内部memberに紐付くStripe Customer/active Subscriptionを再検証。メール文字列だけでの復元は禁止
 - Live課金: `LIVE_BILLING_ENABLED=true` が最終スイッチ
 
 ## 完了済み
@@ -54,7 +55,13 @@
 - Pro PDF総合所見・優先SKU・推奨アクション
 - GitHub Actions + Cloudflare deployment gate
 
-## Stripe-only認証方針
+## Google本人認証 + Stripe権限方針
+
+Googleに委託するもの:
+
+- OpenID Connectによる本人認証
+- 安定ID `sub`
+- 検証済みメール情報（連絡・照合補助。権限元にはしない）
 
 Stripeに委託するもの:
 
@@ -69,18 +76,26 @@ Stripeに委託するもの:
 
 DemandScope側に残すもの:
 
+- Google `sub` と内部member IDの紐付け
+- 内部memberとStripe Customer IDの紐付け
 - Checkoutを開始したブラウザとの照合
 - HttpOnly署名Cookie
 - Stripe Subscriptionのactive/trialing再検証
 - Webhookによる契約状態同期
 
-Stripe Customer Portalは**課金・契約管理の本人確認**であり、DemandScopeアプリ本体へのログイン認証ではない。メールアドレスを入力しただけで既存Subscriptionを復元する実装は禁止する。
+**Googleログイン成功 = Pro** ではない。Proは必ずStripe Subscriptionを再照合して決める。Stripe Customer Portalは課金・契約管理用であり、メールアドレスを入力しただけで既存Subscriptionを復元する実装は禁止する。
 
 ## 本番公開を止めている残件
 
-### 1. Cloudflare LIVE Stripe Variables / Secrets
+### 1. Cloudflare Google / LIVE Stripe Variables / Secrets
 
 Productionに設定:
+
+- `GOOGLE_OAUTH_CLIENT_SECRET` = Secret
+- `SESSION_SECRET` = Secret（Google identity cookie / Checkout browser state用）
+- Google Auth PlatformのDemandScope専用ClientにProduction callback URIを登録
+
+Stripe側:
 
 - `STRIPE_LIVE_SECRET_KEY` = Secret
 - `STRIPE_LIVE_PRO_PRICE_ID=price_1Ua2NWBGa8rL8jwIKk7Tbtas`
@@ -124,4 +139,6 @@ Secret値はGitHub・README・チャットへ保存しない。
 - PDF/CSV/XLSX PASS
 - 法務表示と実課金条件一致
 - Stripe公開表示に不要な個人情報・NamiData商品名の混入なし
-- Google OAuth依存なし
+- Google OAuth本人認証PASS
+- Google `sub`→内部member→Stripe Customer/Subscription紐付けPASS
+- Google単独・メール文字列単独でProにならないことを確認

@@ -8,7 +8,8 @@ export async function onRequestPost({request,env}){
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
  let input={};try{input=await request.json()}catch{}
  const googleCfg=googleConfiguration(env);const member=await authenticatedMember(request,env);
- if(googleCfg.configured&&!member)return json({error:'Googleでログインしてから決済へ進んでください。',auth_required:true},401);
+ if(mode==='live'&&!googleCfg.configured)return json({error:'Google本人認証の本番設定が未完了です。販売開始を停止しています。',auth_not_configured:true,issues:googleCfg.issues},503);
+ if((mode==='live'||googleCfg.configured)&&!member)return json({error:'Googleでログインしてから決済へ進んでください。',auth_required:true},401);
  if(input?.accept_terms!==true)return json({error:'利用規約・プライバシーポリシー・課金条件への同意が必要です。'},400);
  const buyerEmail=String(input?.buyer_email||'').trim().toLowerCase();
  if(!validBuyerEmail(buyerEmail))return json({error:'購入者メールアドレスを正しく入力してください。'},400);

@@ -1,5 +1,5 @@
 import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId,verifyLivePrice,LIVE_MONTHLY_JPY} from '../../server/stripe.js';
-import {DEFAULT_DISCLOSURE_REQUEST_URL} from '../../server/legal.js';
+import {DEFAULT_DISCLOSURE_REQUEST_URL,REFUND_POLICY_CONFIRMED_IN_CODE,REAL_CARD_E2E_WAIVED_BY_OWNER} from '../../server/legal.js';
 import {authMailGatewayConfig,gatewayHealth} from '../../server/auth-mail-gateway.js';
 import {googleConfiguration} from '../../server/google-auth.js';
 
@@ -25,7 +25,7 @@ export async function onRequestGet({env}){
   explicit_operator_details:explicitOperator,
   disclosure_on_request:disclosureOnRequest,
   disclosure_url:disclosureOnRequest?disclosureUrl:null,
-  refund_policy_confirmed:env.REFUND_POLICY_CONFIRMED==='true',
+  refund_policy_confirmed:REFUND_POLICY_CONFIRMED_IN_CODE===true||env.REFUND_POLICY_CONFIRMED==='true',
   support_channel:!!env.SUPPORT_EMAIL||!!env.SUPPORT_URL||disclosureOnRequest
  };
  const testWebhook=typeof (env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET)==='string'&&(env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET).startsWith('whsec_');
@@ -71,5 +71,5 @@ export async function onRequestGet({env}){
  const gatewayCfg=authMailGatewayConfig(env);const gateway=gatewayCfg.configured?await gatewayHealth(env):{reachable:false,ready:false,configured:false};
  const access={provider:'stripe',checkout_browser_activation:true,customer_portal_email_login:true,cross_device_app_login:gateway.ready===true,magic_link:{provider:'auth-mail-gateway',configured:gatewayCfg.configured,gateway_reachable:gateway.reachable===true,gateway_ready:gateway.ready===true,sender_domain:gateway.ready?gateway.sender_domain:null,ttl_minutes:10}};
  if(!gateway.ready)notes.push('Stripe Customer Portal handles billing only. Cross-device Pro restoration remains disabled until the shared Auth Mail Gateway is configured and ready.');
- return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,identity:{provider:'google',configured:google.configured,issues:google.issues,canonical_origin_ready:originReady,app_origin:appOrigin||null},access,legal,notes});
+ return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,identity:{provider:'google',configured:google.configured,issues:google.issues,canonical_origin_ready:originReady,app_origin:appOrigin||null},access,legal,launch_evidence:{real_card_e2e_waived_by_owner:REAL_CARD_E2E_WAIVED_BY_OWNER===true},notes});
 }

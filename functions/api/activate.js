@@ -12,6 +12,7 @@ export async function onRequestPost({request,env}){
  if(sess.livemode!==live||sess.mode!=='subscription'||sess.status!=='complete'||!['paid','no_payment_required'].includes(sess.payment_status)||sess.metadata?.app!=='demand-scope-pro'||typeof sess.subscription!=='string'||typeof sess.customer!=='string')return json({error:mode==='live'?'有効な本番決済を確認できませんでした。':'有効なテスト決済を確認できませんでした。'},403);
  const sub=await verifiedSubscription(env,sess.subscription,sess.customer);if(!sub)return json({error:'有効なPro契約を確認できませんでした。'},403);
  const linkedMember=typeof sess.metadata?.member_id==='string'?sess.metadata.member_id:null;
+ if(live&&!linkedMember)return json({error:'本番決済にGoogle会員IDが紐付いていません。Pro開放を停止しました。'},403);
  if(linkedMember){
    const member=await authenticatedMember(request,env);
    if(!member||member.id!==linkedMember)return json({error:'決済を開始したGoogleアカウントでログインしてください。'},403);

@@ -1,6 +1,7 @@
 import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId,verifyLivePrice,LIVE_MONTHLY_JPY} from '../../server/stripe.js';
 import {DEFAULT_DISCLOSURE_REQUEST_URL} from '../../server/legal.js';
 import {authMailGatewayConfig,gatewayHealth} from '../../server/auth-mail-gateway.js';
+import {googleConfiguration} from '../../server/google-auth.js';
 
 export async function onRequestGet({env}){
  let d1SchemaOk=false,d1Error=null,webhookBacklog=null,webhookLastError=null,webhookLastEventType=null;
@@ -36,6 +37,9 @@ export async function onRequestGet({env}){
    account={checked:true,charges_enabled:a.charges_enabled===true,payouts_enabled:a.payouts_enabled===true,details_submitted:a.details_submitted===true,error:null};
    livePrice={checked:true,verified:p.ok===true,reason:p.reason||null,expected_jpy:LIVE_MONTHLY_JPY};
  }catch(e){account.error=e instanceof StripeApiError?(e.code||e.message):String(e?.message||e).slice(0,160);livePrice={checked:true,verified:false,reason:'stripe_error',expected_jpy:LIVE_MONTHLY_JPY}}}
+ const google=googleConfiguration(env);
+ const appOrigin=typeof env.APP_ORIGIN==='string'?env.APP_ORIGIN.trim():'';
+ const originReady=mode!=='live'||(/^https:\/\//.test(appOrigin)&&!appOrigin.endsWith('/'));
  const billing={
   mode,
   stripe_configured:stripeIssues.length===0,
@@ -55,15 +59,17 @@ export async function onRequestGet({env}){
  const readyForBillingTest=mode==='test'&&billing.stripe_configured&&testWebhook&&billing.d1_binding&&billing.d1_schema_ok;
  const readyForUnattendedTest=readyForBillingTest;
  const legalReady=(legal.explicit_operator_details||legal.disclosure_on_request)&&legal.refund_policy_confirmed&&legal.support_channel;
- const readyForLive=mode==='live'&&billing.stripe_configured&&liveWebhook&&billing.d1_binding&&billing.d1_schema_ok&&webhookBacklog===0&&legalReady&&livePrice.verified===true&&account.charges_enabled===true&&account.payouts_enabled===true&&account.details_submitted===true;
+ const readyForLive=mode==='live'&&billing.stripe_configured&&liveWebhook&&billing.d1_binding&&billing.d1_schema_ok&&webhookBacklog===0&&legalReady&&livePrice.verified===true&&account.charges_enabled===true&&account.payouts_enabled===true&&account.details_submitted===true&&google.configured&&originReady;
  const notes=[];
  if(mode!=='live')notes.push('Live billing is still gated off.');
  if(!priceId&&mode==='live')notes.push('A live recurring Stripe Price ID is required.');
  if(mode==='live'&&livePrice.checked&&!livePrice.verified)notes.push('Live Price must be an active DemandScope Pro JPY 980 monthly price.');
  if(!legal.refund_policy_confirmed)notes.push('Refund policy must be explicitly confirmed before live sales.');
  if(mode==='live'&&account.checked&&account.payouts_enabled!==true)notes.push('Stripe payouts must be enabled before live launch.');
+ if(mode==='live'&&!google.configured)notes.push('Google OAuth must be fully configured before live sales.');
+ if(mode==='live'&&!originReady)notes.push('APP_ORIGIN must be the exact canonical HTTPS origin before live sales.');
  const gatewayCfg=authMailGatewayConfig(env);const gateway=gatewayCfg.configured?await gatewayHealth(env):{reachable:false,ready:false,configured:false};
  const access={provider:'stripe',checkout_browser_activation:true,customer_portal_email_login:true,cross_device_app_login:gateway.ready===true,magic_link:{provider:'auth-mail-gateway',configured:gatewayCfg.configured,gateway_reachable:gateway.reachable===true,gateway_ready:gateway.ready===true,sender_domain:gateway.ready?gateway.sender_domain:null,ttl_minutes:10}};
  if(!gateway.ready)notes.push('Stripe Customer Portal handles billing only. Cross-device Pro restoration remains disabled until the shared Auth Mail Gateway is configured and ready.');
- return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,access,legal,notes});
+ return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,identity:{provider:'google',configured:google.configured,issues:google.issues,canonical_origin_ready:originReady,app_origin:appOrigin||null},access,legal,notes});
 }

@@ -8,6 +8,7 @@ import {
   authenticatedMember
 } from '../server/google-auth.js';
 import {onRequestPost as checkout} from '../functions/api/checkout.js';
+import {onRequestPost as activate} from '../functions/api/activate.js';
 
 const enc=new TextEncoder();
 const b64=bytes=>Buffer.from(bytes).toString('base64url');
@@ -171,5 +172,65 @@ test('Google configured checkout requires identity and binds member_id without e
   assert.equal(form.get('customer_email'),'billing@example.net');
   assert.equal(form.get('metadata[member_id]'),db.members[0].id);
   assert.equal(form.get('subscription_data[metadata][member_id]'),db.members[0].id);
+ }finally{globalThis.fetch=old}
+});
+
+
+test('LIVE checkout and activation succeed only with Google member binding and the initiating browser',async()=>{
+ const {e,result,db}=await successfulIdentity();
+ const live={
+  ...e,
+  LIVE_BILLING_ENABLED:'true',
+  STRIPE_LIVE_SECRET_KEY:'rk_live_google_test_123',
+  STRIPE_LIVE_PRO_PRICE_ID:'price_livegoogle123',
+  APP_ORIGIN:'https://web-stock-78r.pages.dev'
+ };
+ const goodPrice={id:'price_livegoogle123',livemode:true,active:true,currency:'jpy',unit_amount:980,recurring:{interval:'month',interval_count:1},product:{active:true,metadata:{app:'demand-scope-pro',tier:'pro'}}};
+ const identity=firstCookie(result.cookie);
+ let checkoutForm=null;
+ const old=globalThis.fetch;
+ try{
+  globalThis.fetch=async(url,opt={})=>{
+   const s=String(url);
+   if(s.includes('/prices/'))return new Response(JSON.stringify(goodPrice),{headers:{'content-type':'application/json'}});
+   if(s.endsWith('/checkout/sessions')){
+    checkoutForm=new URLSearchParams(opt.body);
+    return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/live-google'}),{headers:{'content-type':'application/json'}});
+   }
+   if(s.includes('/checkout/sessions/cs_live_valid_member_123')){
+    return new Response(JSON.stringify({
+      id:'cs_live_valid_member_123',livemode:true,mode:'subscription',status:'complete',payment_status:'paid',
+      client_reference_id:checkoutForm.get('client_reference_id'),
+      metadata:{app:'demand-scope-pro',member_id:db.members[0].id},
+      subscription:'sub_livemember123',customer:'cus_livemember123'
+    }),{headers:{'content-type':'application/json'}});
+   }
+   if(s.includes('/subscriptions/sub_livemember123')){
+    return new Response(JSON.stringify({
+      id:'sub_livemember123',livemode:true,status:'active',customer:'cus_livemember123',
+      metadata:{app:'demand-scope-pro',member_id:db.members[0].id},
+      items:{data:[{price:{id:'price_livegoogle123'}}]}
+    }),{headers:{'content-type':'application/json'}});
+   }
+   throw new Error('unexpected fetch '+s);
+  };
+  const checkoutReq=new Request('https://web-stock-78r.pages.dev/api/checkout',{
+    method:'POST',
+    headers:{Origin:'https://web-stock-78r.pages.dev','Content-Type':'application/json',Cookie:identity},
+    body:JSON.stringify({accept_terms:true,buyer_email:'billing@example.net'})
+  });
+  const checkoutRes=await checkout({request:checkoutReq,env:live});
+  assert.equal(checkoutRes.status,200,await checkoutRes.clone().text());
+  assert.equal(checkoutForm.get('metadata[member_id]'),db.members[0].id);
+  const checkoutCookie=firstCookie(checkoutRes.headers.get('Set-Cookie'));
+  const activateReq=new Request('https://web-stock-78r.pages.dev/api/activate',{
+    method:'POST',
+    headers:{Origin:'https://web-stock-78r.pages.dev','Content-Type':'application/json',Cookie:identity+'; '+checkoutCookie},
+    body:JSON.stringify({session_id:'cs_live_valid_member_123'})
+  });
+  const activated=await activate({request:activateReq,env:live});
+  assert.equal(activated.status,200,await activated.clone().text());
+  assert.match(activated.headers.get('Set-Cookie'),/demand_pro=/);
+  assert.equal(db.members[0].stripe_customer_id,'cus_livemember123');
  }finally{globalThis.fetch=old}
 });

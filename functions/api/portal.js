@@ -1,4 +1,4 @@
-import {json,isConfigured,validOrigin,origin,stripe,billingMode} from '../../server/stripe.js';
+import {json,isConfigured,validOrigin,origin,stripe,billingMode,LIVE_PORTAL_CONFIG_ID} from '../../server/stripe.js';
 import {resolveEntitlement} from '../../server/access.js';
 export async function onRequestPost({request,env}){
  const mode=billingMode(env);
@@ -6,7 +6,7 @@ export async function onRequestPost({request,env}){
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
  try{
   const a=await resolveEntitlement(request,env);if(!a)return json({error:'契約の確認が必要です。'},401);
-  const config=mode==='live'?env.STRIPE_LIVE_PORTAL_CONFIG_ID:(env.STRIPE_PORTAL_CONFIG_ID||'bpc_1UZ2FNBGa8rL8jwIBPFuUkWT');
+  const config=mode==='live'?(env.STRIPE_LIVE_PORTAL_CONFIG_ID||LIVE_PORTAL_CONFIG_ID):(env.STRIPE_PORTAL_CONFIG_ID||'bpc_1UZ2FNBGa8rL8jwIBPFuUkWT');
   if(!/^bpc_[A-Za-z0-9]+$/.test(config||''))return json({error:mode==='live'?'本番用Stripeポータル設定IDが未設定です。':'ポータル設定IDが不正です。'},503);
   const session=await stripe(env,'/billing_portal/sessions',{
    customer:a.customer,

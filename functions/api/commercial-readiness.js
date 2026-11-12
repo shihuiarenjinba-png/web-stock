@@ -1,4 +1,4 @@
-import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId,verifyLivePrice,LIVE_MONTHLY_JPY} from '../../server/stripe.js';
+import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId,verifyLivePrice,LIVE_MONTHLY_JPY,LIVE_APP_ORIGIN} from '../../server/stripe.js';
 import {DEFAULT_DISCLOSURE_REQUEST_URL,REFUND_POLICY_CONFIRMED_IN_CODE,REAL_CARD_E2E_WAIVED_BY_OWNER} from '../../server/legal.js';
 import {authMailGatewayConfig,gatewayHealth} from '../../server/auth-mail-gateway.js';
 import {googleConfiguration} from '../../server/google-auth.js';
@@ -38,7 +38,7 @@ export async function onRequestGet({env}){
    livePrice={checked:true,verified:p.ok===true,reason:p.reason||null,expected_jpy:LIVE_MONTHLY_JPY};
  }catch(e){account.error=e instanceof StripeApiError?(e.code||e.message):String(e?.message||e).slice(0,160);livePrice={checked:true,verified:false,reason:'stripe_error',expected_jpy:LIVE_MONTHLY_JPY}}}
  const google=googleConfiguration(env);
- const appOrigin=typeof env.APP_ORIGIN==='string'?env.APP_ORIGIN.trim():'';
+ const appOrigin=(typeof env.APP_ORIGIN==='string'&&env.APP_ORIGIN.trim())|| (mode==='live'?LIVE_APP_ORIGIN:'');
  const originReady=mode!=='live'||(/^https:\/\//.test(appOrigin)&&!appOrigin.endsWith('/'));
  const billing={
   mode,

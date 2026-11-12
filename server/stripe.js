@@ -5,10 +5,15 @@ export function json(body,status=200,headers={}) {const h=new Headers({'Content-
 // AND a dedicated live Stripe key + live recurring Price ID are configured.
 export const TEST_MONTHLY_JPY=100;
 export const LIVE_MONTHLY_JPY=980;
+export const LIVE_PRO_PRICE_ID='price_1Ua2NWBGa8rL8jwIKk7Tbtas';
+export const LIVE_APP_ORIGIN='https://web-stock-78r.pages.dev';
+export const LIVE_PORTAL_CONFIG_ID='bpc_1UZqUZBGa8rL8jwIrmBsxuO0';
+export const LIVE_PORTAL_LOGIN_URL='https://billing.stripe.com/p/login/7sYaEW1Q36DN9Km1GN93y00';
+export const OWNER_LIVE_SALE_APPROVED=true;
 function normalizedSecret(value){return typeof value==='string'?value.trim():''}
 function normalizedValue(value){return typeof value==='string'?value.trim():''}
 function configuredOrigin(env){
- const raw=normalizedValue(env?.APP_ORIGIN);
+ const raw=normalizedValue(env?.APP_ORIGIN)||(billingMode(env)==='live'?LIVE_APP_ORIGIN:'');
  if(!raw)return null;
  try{
   const u=new URL(raw);
@@ -17,7 +22,13 @@ function configuredOrigin(env){
   return u.origin;
  }catch{return null}
 }
-export function billingMode(env){return env?.LIVE_BILLING_ENABLED==='true'?'live':'test'}
+export function billingMode(env){
+ const explicit=normalizedValue(env?.LIVE_BILLING_ENABLED);
+ if(explicit==='false')return 'test';
+ if(explicit==='true')return 'live';
+ const liveKey=normalizedSecret(env?.STRIPE_LIVE_SECRET_KEY);
+ return OWNER_LIVE_SALE_APPROVED&&(/^(?:sk|rk)_live_/.test(liveKey))?'live':'test';
+}
 export function expectedLivemode(env){return billingMode(env)==='live'}
 export function activeStripeKey(env){
  return billingMode(env)==='live'
@@ -26,7 +37,7 @@ export function activeStripeKey(env){
 }
 export function activePriceId(env){
  return billingMode(env)==='live'
-  ?normalizedValue(env?.STRIPE_LIVE_PRO_PRICE_ID)
+  ?(normalizedValue(env?.STRIPE_LIVE_PRO_PRICE_ID)||LIVE_PRO_PRICE_ID)
   :normalizedValue(env?.STRIPE_PRO_PRICE_ID);
 }
 export function configurationDiagnostics(env){
@@ -42,7 +53,7 @@ export function configurationDiagnostics(env){
  const priceId=activePriceId(env),priceName=mode==='live'?'STRIPE_LIVE_PRO_PRICE_ID':'STRIPE_PRO_PRICE_ID';
  if(mode==='live'&&!priceId)issues.push({name:priceName,reason:'missing'});
  else if(priceId&&!/^price_[A-Za-z0-9]+$/.test(priceId))issues.push({name:priceName,reason:'invalid_format'});
- const appOrigin=normalizedValue(env?.APP_ORIGIN);
+ const appOrigin=normalizedValue(env?.APP_ORIGIN)||(mode==='live'?LIVE_APP_ORIGIN:'');
  if(mode==='live'&&!appOrigin)issues.push({name:'APP_ORIGIN',reason:'missing'});
  else if(appOrigin&&!configuredOrigin(env))issues.push({name:'APP_ORIGIN',reason:'invalid_origin'});
  return issues;

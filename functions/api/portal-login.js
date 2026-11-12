@@ -1,11 +1,11 @@
-import {json,billingMode} from '../../server/stripe.js';
+import {json,billingMode,LIVE_PORTAL_LOGIN_URL} from '../../server/stripe.js';
 
 export const DEFAULT_TEST_PORTAL_LOGIN='https://billing.stripe.com/p/login/test_7sYaEW1Q36DN9Km1GN93y00';
 
 export function portalLoginUrl(env){
  const mode=billingMode(env);
  const value=mode==='live'
-  ?(typeof env?.STRIPE_LIVE_PORTAL_LOGIN_URL==='string'?env.STRIPE_LIVE_PORTAL_LOGIN_URL.trim():'')
+  ?(typeof env?.STRIPE_LIVE_PORTAL_LOGIN_URL==='string'&&env.STRIPE_LIVE_PORTAL_LOGIN_URL.trim()?env.STRIPE_LIVE_PORTAL_LOGIN_URL.trim():LIVE_PORTAL_LOGIN_URL)
   :(typeof env?.STRIPE_PORTAL_LOGIN_URL==='string'&&env.STRIPE_PORTAL_LOGIN_URL.trim()?env.STRIPE_PORTAL_LOGIN_URL.trim():DEFAULT_TEST_PORTAL_LOGIN);
  try{
   const url=new URL(value);

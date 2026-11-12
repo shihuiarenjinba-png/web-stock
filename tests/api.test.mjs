@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState,TEST_MONTHLY_JPY,LIVE_MONTHLY_JPY,configurationMissing,billingMode,activePriceId,expectedLivemode,validateLivePriceObject,verifyLivePrice} from '../server/stripe.js';
+import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState,TEST_MONTHLY_JPY,LIVE_MONTHLY_JPY,LIVE_PRO_PRICE_ID,LIVE_PORTAL_LOGIN_URL,configurationMissing,billingMode,activePriceId,expectedLivemode,validateLivePriceObject,verifyLivePrice} from '../server/stripe.js';
 import {onRequestPost as checkout} from '../functions/api/checkout.js';
 import {onRequestPost as activate} from '../functions/api/activate.js';
 import {onRequestGet as verify} from '../functions/api/entitlement.js';
@@ -10,7 +10,7 @@ const env={STRIPE_SECRET_KEY:'sk_test_mock_only_123',STRIPE_PRO_PRICE_ID:'price_
 function request(path,origin='http://localhost:8788',body=null,headers={}){return new Request('http://localhost:8788'+path,{method:body===null?'GET':'POST',headers:{Origin:origin,'Content-Type':'application/json',...headers},body:body===null?undefined:JSON.stringify(body)})}
 const sess={livemode:false,mode:'subscription',status:'complete',payment_status:'paid',metadata:{app:'demand-scope-pro'},subscription:'sub_test123',customer:'cus_test123'};
 const sub={livemode:false,status:'active',metadata:{app:'demand-scope-pro'},customer:'cus_test123',items:{data:[{price:{id:'price_valid'}}]}};
-test('billing defaults to TEST and LIVE requires an explicit gate, live key and live Price',()=>{assert.equal(billingMode(env),'test');assert.ok(isConfigured(env));assert.ok(!isConfigured({...env,STRIPE_SECRET_KEY:'sk_live_forbidden'}));assert.ok(!isConfigured({...env,SESSION_SECRET:'short'}));const live={LIVE_BILLING_ENABLED:'true',STRIPE_LIVE_SECRET_KEY:'sk_live_mock_123',STRIPE_LIVE_PRO_PRICE_ID:'price_live123',SESSION_SECRET:'L'.repeat(48),APP_ORIGIN:'https://example.com'};assert.equal(billingMode(live),'live');assert.equal(expectedLivemode(live),true);assert.equal(activePriceId(live),'price_live123');assert.ok(isConfigured(live));assert.ok(!isConfigured({...live,STRIPE_LIVE_PRO_PRICE_ID:''}));assert.ok(!isConfigured({...live,STRIPE_LIVE_SECRET_KEY:'sk_test_wrong'}))});
+test('billing stays TEST without a live key and auto-enters LIVE after owner approval when a valid live key is present',()=>{assert.equal(billingMode(env),'test');assert.ok(isConfigured(env));assert.ok(!isConfigured({...env,STRIPE_SECRET_KEY:'sk_live_forbidden'}));assert.ok(!isConfigured({...env,SESSION_SECRET:'short'}));const live={STRIPE_LIVE_SECRET_KEY:'sk_live_mock_123',SESSION_SECRET:'L'.repeat(48)};assert.equal(billingMode(live),'live');assert.equal(expectedLivemode(live),true);assert.equal(activePriceId(live),LIVE_PRO_PRICE_ID);assert.ok(isConfigured(live));assert.equal(billingMode({...live,LIVE_BILLING_ENABLED:'false'}),'test');assert.ok(!isConfigured({...live,STRIPE_LIVE_SECRET_KEY:'sk_test_wrong'}))});
 test('live price validator requires active DemandScope Pro JPY 980 monthly',()=>{
  const good={id:'price_live123',livemode:true,active:true,currency:'jpy',unit_amount:LIVE_MONTHLY_JPY,recurring:{interval:'month',interval_count:1},product:{active:true,metadata:{app:'demand-scope-pro',tier:'pro'}}};
  assert.equal(validateLivePriceObject(good).ok,true);
@@ -135,11 +135,13 @@ test('public portal email-login redirect is pinned to Stripe TEST hosted login',
  assert.equal(bad.status,503);
 });
 
-test('live portal login is separate and rejects TEST login URLs',async()=>{
+test('live portal login defaults to the pinned LIVE portal and rejects TEST login URLs',async()=>{
  const live={LIVE_BILLING_ENABLED:'true',STRIPE_LIVE_PORTAL_LOGIN_URL:'https://billing.stripe.com/p/login/live_demo123'};
  assert.equal(portalLoginUrl(live),'https://billing.stripe.com/p/login/live_demo123');
  assert.equal(portalLoginUrl({...live,STRIPE_LIVE_PORTAL_LOGIN_URL:DEFAULT_TEST_PORTAL_LOGIN}),null);
- const missing=await portalLogin({env:{LIVE_BILLING_ENABLED:'true'}});assert.equal(missing.status,503);
+ const defaultLive=await portalLogin({env:{LIVE_BILLING_ENABLED:'true'}});
+ assert.equal(defaultLive.status,302);
+ assert.equal(defaultLive.headers.get('Location'),LIVE_PORTAL_LOGIN_URL);
 });
 
 

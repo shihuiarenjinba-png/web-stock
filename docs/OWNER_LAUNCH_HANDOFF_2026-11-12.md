@@ -62,3 +62,18 @@ Leave LIVE_BILLING_ENABLED=true only after the above lifecycle passes.
 - Portal/Webhook integration
 - Japanese/English UI
 - sale RC and CI gates
+
+## Reduced Cloudflare input after owner approval
+
+Non-secret LIVE settings are now pinned in code:
+- LIVE mode automatically activates when a valid STRIPE_LIVE_SECRET_KEY is present (unless LIVE_BILLING_ENABLED=false is explicitly set).
+- Live Pro Price: price_1Ua2NWBGa8rL8jwIKk7Tbtas
+- Live Portal config: bpc_1UZqUZBGa8rL8jwIrmBsxuO0
+- Live Portal login URL is pinned.
+- Production origin: https://web-stock-78r.pages.dev
+
+Therefore the remaining Cloudflare secrets are only:
+- STRIPE_LIVE_SECRET_KEY
+- STRIPE_LIVE_WEBHOOK_SECRET
+
+Do not place either secret in GitHub or chat.

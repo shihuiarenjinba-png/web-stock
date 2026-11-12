@@ -7,6 +7,16 @@ export const TEST_MONTHLY_JPY=100;
 export const LIVE_MONTHLY_JPY=980;
 function normalizedSecret(value){return typeof value==='string'?value.trim():''}
 function normalizedValue(value){return typeof value==='string'?value.trim():''}
+function configuredOrigin(env){
+ const raw=normalizedValue(env?.APP_ORIGIN);
+ if(!raw)return null;
+ try{
+  const u=new URL(raw);
+  const local=u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname);
+  if(!(u.protocol==='https:'||local)||u.username||u.password||u.origin!==raw)return null;
+  return u.origin;
+ }catch{return null}
+}
 export function billingMode(env){return env?.LIVE_BILLING_ENABLED==='true'?'live':'test'}
 export function expectedLivemode(env){return billingMode(env)==='live'}
 export function activeStripeKey(env){
@@ -32,7 +42,9 @@ export function configurationDiagnostics(env){
  const priceId=activePriceId(env),priceName=mode==='live'?'STRIPE_LIVE_PRO_PRICE_ID':'STRIPE_PRO_PRICE_ID';
  if(mode==='live'&&!priceId)issues.push({name:priceName,reason:'missing'});
  else if(priceId&&!/^price_[A-Za-z0-9]+$/.test(priceId))issues.push({name:priceName,reason:'invalid_format'});
- if(env?.APP_ORIGIN){try{const u=new URL(env.APP_ORIGIN);if(u.origin!==env.APP_ORIGIN||!(u.protocol==='https:'||(u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname))))issues.push({name:'APP_ORIGIN',reason:'invalid_origin'});}catch{issues.push({name:'APP_ORIGIN',reason:'invalid_origin'})}}
+ const appOrigin=normalizedValue(env?.APP_ORIGIN);
+ if(mode==='live'&&!appOrigin)issues.push({name:'APP_ORIGIN',reason:'missing'});
+ else if(appOrigin&&!configuredOrigin(env))issues.push({name:'APP_ORIGIN',reason:'invalid_origin'});
  return issues;
 }
 export function configurationMissing(env){return [...new Set(configurationDiagnostics(env).map(x=>x.name))]}
@@ -63,13 +75,16 @@ function trustedRequestOrigin(request){
  return value.origin;
 }
 export function origin(env,request){
+ const configured=configuredOrigin(env);
+ if(configured)return configured;
  if(request)return trustedRequestOrigin(request);
- if(env?.APP_ORIGIN)return new URL(env.APP_ORIGIN).origin;
  throw new Error('Request required when APP_ORIGIN is not configured');
 }
 export function validOrigin(request,env){
  try{
-  const target=trustedRequestOrigin(request);
+  const requestOrigin=trustedRequestOrigin(request);
+  const target=configuredOrigin(env)||requestOrigin;
+  if(requestOrigin!==target)return false;
   const h=request.headers.get('Origin');
   if(h)return new URL(h).origin===target;
   const ref=request.headers.get('Referer');

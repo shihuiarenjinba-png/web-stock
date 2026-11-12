@@ -142,3 +142,8 @@ Secret値はGitHub・README・チャットへ保存しない。
 - Google OAuth本人認証PASS
 - Google `sub`→内部member→Stripe Customer/Subscription紐付けPASS
 - Google単独・メール文字列単独でProにならないことを確認
+
+
+### 価格表示確認（2026-11-12）
+- お客様の支払総額: **980円 / 月**
+- Stripe Taxによる追加課税を前提にせず、事業者側の消費税申告・経理処理とは分離して扱う。

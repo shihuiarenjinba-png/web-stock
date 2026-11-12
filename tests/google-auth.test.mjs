@@ -182,10 +182,10 @@ test('LIVE checkout and activation succeed only with Google member binding and t
   ...e,
   LIVE_BILLING_ENABLED:'true',
   STRIPE_LIVE_SECRET_KEY:'rk_live_google_test_123',
-  STRIPE_LIVE_PRO_PRICE_ID:'price_live_google123',
+  STRIPE_LIVE_PRO_PRICE_ID:'price_livegoogle123',
   APP_ORIGIN:'https://web-stock-78r.pages.dev'
  };
- const goodPrice={id:'price_live_google123',livemode:true,active:true,currency:'jpy',unit_amount:980,recurring:{interval:'month',interval_count:1},product:{active:true,metadata:{app:'demand-scope-pro',tier:'pro'}}};
+ const goodPrice={id:'price_livegoogle123',livemode:true,active:true,currency:'jpy',unit_amount:980,recurring:{interval:'month',interval_count:1},product:{active:true,metadata:{app:'demand-scope-pro',tier:'pro'}}};
  const identity=firstCookie(result.cookie);
  let checkoutForm=null;
  const old=globalThis.fetch;
@@ -209,7 +209,7 @@ test('LIVE checkout and activation succeed only with Google member binding and t
     return new Response(JSON.stringify({
       id:'sub_live_member123',livemode:true,status:'active',customer:'cus_live_member123',
       metadata:{app:'demand-scope-pro',member_id:db.members[0].id},
-      items:{data:[{price:{id:'price_live_google123'}}]}
+      items:{data:[{price:{id:'price_livegoogle123'}}]}
     }),{headers:{'content-type':'application/json'}});
    }
    throw new Error('unexpected fetch '+s);

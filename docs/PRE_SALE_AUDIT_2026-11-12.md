@@ -58,3 +58,26 @@ Do not switch to public charging until all items are confirmed:
 
 This SHA may be used as the basis of a sale release candidate.
 It must not be interpreted as authorization to enable live billing automatically.
+
+## Owner launch decision — 2026-11-12
+
+The owner explicitly approved public launch without an owner-controlled real-card production E2E because they cannot fund a live test purchase.
+
+Accepted residual risk:
+- no live card charge has been observed end-to-end before launch;
+- automated TEST/CI/live-object verification is used as launch evidence;
+- runtime Stripe/OAuth/webhook/account checks remain fail-closed.
+
+The published refund/cancellation policy is confirmed by the owner:
+- JPY 980/month auto-renewal;
+- cancellation at period end;
+- no normal prorated refund for user-initiated mid-period cancellation;
+- duplicate/incorrect charges, serious service-side payment faults, and legally required refunds are handled separately.
+
+Remaining Cloudflare-only cutover inputs:
+- LIVE_BILLING_ENABLED=true
+- STRIPE_LIVE_SECRET_KEY
+- STRIPE_LIVE_WEBHOOK_SECRET
+- STRIPE_LIVE_PRO_PRICE_ID=price_1Ua2NWBGa8rL8jwIKk7Tbtas
+- STRIPE_LIVE_PORTAL_CONFIG_ID=bpc_1UZqUZBGa8rL8jwIrmBsxuO0
+- APP_ORIGIN=https://web-stock-78r.pages.dev

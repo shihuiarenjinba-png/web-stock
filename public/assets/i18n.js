@@ -89,6 +89,34 @@ const en={
 'Proで詳細分析を見る':'Explore full analysis in Pro',
 '簡易診断 / サービスレベル95%固定 / 7日移動平均 / 正規分布・独立需要の仮定':'Quick check / fixed 95% service level / 7-day moving average / independent normal demand assumption',
 };
+Object.assign(en,{
+'テスト月額プラン':'Test monthly plan',
+'100円/月（Stripeテストモード・実請求なし）':'JPY 100 / month (Stripe test mode · no real charge)',
+'月額自動更新の動作確認用。解約はStripe契約管理画面から行えます。':'Monthly auto-renewal test. Cancel from Stripe subscription management.',
+'利用規約':'Terms','プライバシーポリシー':'Privacy policy','特商法表記':'Commercial disclosure','課金・解約条件':'Billing & cancellation',
+'Google本人認証':'Google identity verification',
+'Googleログイン状態を確認中...':'Checking Google sign-in…',
+'Googleでログイン':'Sign in with Google',
+'Googleログアウト':'Sign out of Google',
+'Googleは本人確認のみを担当します。Pro利用権限はGoogleログイン後もStripeの有効なDemandScope Pro契約をサーバー側で再確認します。':'Google is used only for identity verification. Pro access is granted only after the server re-checks an active DemandScope Pro subscription in Stripe.',
+'このメールアドレスをStripe CheckoutとCustomer Portalの契約管理に使用します。Googleログインのメールを初期表示する場合がありますが、請求先メールは別のアドレスに変更できます。Pro権限はメール文字列ではなく、Googleの内部本人IDとStripe契約をサーバー側で紐付けて判定します。':'This email is used for Stripe Checkout and Customer Portal. Your Google email may be prefilled, but the billing email can be changed. Pro access is determined by linking the internal Google identity to a Stripe subscription, not by the email string alone.',
+'Stripe接続を確認中...':'Checking Stripe connection…',
+'別端末・Cookie削除後のPro復旧':'Restore Pro after changing devices or clearing cookies',
+'購入時のメールアドレスへ共通Auth Mail Gatewayから10分間・1回限りの本人確認リンクを送信します。リンクを開いた後、DemandScope側でStripeの有効なPro契約を再確認して、そのリンクを開いたブラウザをProとして認証します。':'A one-time identity link valid for 10 minutes is sent to the purchase email. After opening it, DemandScope re-checks the active Stripe Pro subscription before restoring access in that browser.',
+'購入時メールアドレス':'Purchase email',
+'本人確認リンクを送信':'Send verification link',
+'Stripeのメール認証は契約管理用であり、DemandScope本体へのログイン機能ではありません。':'Stripe email authentication is for subscription management, not for signing in to DemandScope itself.',
+'4,000試行のドット分布':'4,000-run dot distribution',
+'1点 = 1回のリードタイム需要':'1 dot = 1 lead-time demand simulation',
+'横方向が需要量です。点の密集位置ほど多くの試行が集まっています。発注点・現在庫・中央値を同時表示します。':'The horizontal axis is demand. Denser areas contain more simulations. Reorder point, on-hand stock, and median are shown together.',
+'保守推定':'Conservative estimate',
+'採用ボラティリティ':'Selected volatility',
+'変更を保存':'Save changes','編集':'Edit','削除':'Delete',
+'結果をコピーしました':'Copied result','テキストを選択してコピーしてください':'Select the text and copy it manually.',
+'商品名を入力してください。':'Enter a product name.','需要データが長すぎます。':'Demand data is too long.','Proでは登録は最大200商品です。':'Pro supports up to 200 products.','商品を保存しました':'Product saved.',
+'この端末のProセッションからサインアウトしました':'Signed out of the Pro session on this device.',
+'Stripe決済の前にGoogleで本人確認してください。':'Verify your identity with Google before starting Stripe Checkout.'
+});
 let current='ja';const orig=new WeakMap();
 export const lang=()=>current;
 export function t(s){return current==='en'?(en[s]??s):s;}

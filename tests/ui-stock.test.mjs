@@ -18,3 +18,11 @@ test('each stock field has a visible per-series caption and accessible name',()=
  assert.match(app,/on-hand inventory in units/);
  assert.match(style,/\.series-stock-cell/);
 });
+
+test('recent Google and Stripe Pro UI copy has English translations',()=>{
+ assert.match(i18n,/Google identity verification/);
+ assert.match(i18n,/Google is used only for identity verification/);
+ assert.match(i18n,/Checking Stripe connection/);
+ assert.match(i18n,/Restore Pro after changing devices or clearing cookies/);
+ assert.match(i18n,/4,000-run dot distribution/);
+});

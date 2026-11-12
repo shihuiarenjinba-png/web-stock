@@ -220,7 +220,7 @@ test('LIVE checkout and activation succeed only with Google member binding and t
     body:JSON.stringify({accept_terms:true,buyer_email:'billing@example.net'})
   });
   const checkoutRes=await checkout({request:checkoutReq,env:live});
-  assert.equal(checkoutRes.status,200);
+  assert.equal(checkoutRes.status,200,await checkoutRes.clone().text());
   assert.equal(checkoutForm.get('metadata[member_id]'),db.members[0].id);
   const checkoutCookie=firstCookie(checkoutRes.headers.get('Set-Cookie'));
   const activateReq=new Request('https://web-stock-78r.pages.dev/api/activate',{
@@ -229,7 +229,7 @@ test('LIVE checkout and activation succeed only with Google member binding and t
     body:JSON.stringify({session_id:'cs_live_valid_member_123'})
   });
   const activated=await activate({request:activateReq,env:live});
-  assert.equal(activated.status,200);
+  assert.equal(activated.status,200,await activated.clone().text());
   assert.match(activated.headers.get('Set-Cookie'),/demand_pro=/);
   assert.equal(db.members[0].stripe_customer_id,'cus_live_member123');
  }finally{globalThis.fetch=old}

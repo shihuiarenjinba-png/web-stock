@@ -202,12 +202,12 @@ test('LIVE checkout and activation succeed only with Google member binding and t
       id:'cs_live_valid_member_123',livemode:true,mode:'subscription',status:'complete',payment_status:'paid',
       client_reference_id:checkoutForm.get('client_reference_id'),
       metadata:{app:'demand-scope-pro',member_id:db.members[0].id},
-      subscription:'sub_live_member123',customer:'cus_live_member123'
+      subscription:'sub_livemember123',customer:'cus_livemember123'
     }),{headers:{'content-type':'application/json'}});
    }
-   if(s.includes('/subscriptions/sub_live_member123')){
+   if(s.includes('/subscriptions/sub_livemember123')){
     return new Response(JSON.stringify({
-      id:'sub_live_member123',livemode:true,status:'active',customer:'cus_live_member123',
+      id:'sub_livemember123',livemode:true,status:'active',customer:'cus_livemember123',
       metadata:{app:'demand-scope-pro',member_id:db.members[0].id},
       items:{data:[{price:{id:'price_livegoogle123'}}]}
     }),{headers:{'content-type':'application/json'}});
@@ -231,6 +231,6 @@ test('LIVE checkout and activation succeed only with Google member binding and t
   const activated=await activate({request:activateReq,env:live});
   assert.equal(activated.status,200,await activated.clone().text());
   assert.match(activated.headers.get('Set-Cookie'),/demand_pro=/);
-  assert.equal(db.members[0].stripe_customer_id,'cus_live_member123');
+  assert.equal(db.members[0].stripe_customer_id,'cus_livemember123');
  }finally{globalThis.fetch=old}
 });

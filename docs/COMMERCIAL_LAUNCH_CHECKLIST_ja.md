@@ -1,6 +1,6 @@
 # DemandScope 商用公開チェックリスト
 
-更新: 2026-11-10
+更新: 2026-11-13
 
 ## 現在の販売設計
 
@@ -16,7 +16,7 @@
 - 権限元: **Stripe Subscription**。Googleログイン成功だけではProにしない
 - Pro権限: Checkout開始ブラウザの署名Cookie＋Stripe再照合、またはGoogle `sub`→内部member→Stripe Customer/Subscriptionの再照合
 - 別端末復旧: Google本人認証後、内部memberに紐付くStripe Customer/active Subscriptionを再検証。メール文字列だけでの復元は禁止
-- Live課金: `LIVE_BILLING_ENABLED=true` が最終スイッチ
+- Live課金: 有効なProduction Live Secretが揃うまで公開Checkoutをfail-closed。旧設定で `LIVE_BILLING_ENABLED=false` が明示されている場合だけ、最終切替時に解除する。
 
 ## 完了済み
 
@@ -42,6 +42,9 @@
 ### アプリ / Cloudflare
 
 - GitHub main → Cloudflare Pages Production自動デプロイ
+- 公開ProductionでTEST Checkoutを禁止し、Live未準備時は **PRE-LAUNCH / 販売準備中** と表示
+- 初期Pro販売枠: **25名**
+- 同一memberのCheckout連打は同一30分予約を再利用し、1人で複数枠を消費できない
 - D1 Production binding `DB`
 - Stripe Webhook冪等保存
 - Webhook backlog監視
@@ -87,48 +90,49 @@ DemandScope側に残すもの:
 
 ## 本番公開を止めている残件
 
-### 1. Cloudflare Google / LIVE Stripe Variables / Secrets
+### 1. Cloudflare Production LIVE Stripe Secrets
 
-Productionに設定:
+Google OAuth / D1 /法務条件は公開環境で確認済みです。残るProduction秘密値は次の2つです。
 
-- `GOOGLE_OAUTH_CLIENT_SECRET` = Secret
-- `SESSION_SECRET` = Secret（Google identity cookie / Checkout browser state用）
-- Google Auth PlatformのDemandScope専用ClientにProduction callback URIを登録
+- `STRIPE_LIVE_SECRET_KEY`
+- `STRIPE_LIVE_WEBHOOK_SECRET`
 
-Stripe側:
+非SecretのLive Price / Portal / origin はコード側で固定済みです。
 
-- `STRIPE_LIVE_SECRET_KEY` = Secret
-- `STRIPE_LIVE_PRO_PRICE_ID=price_1Ua2NWBGa8rL8jwIKk7Tbtas`
-- `STRIPE_LIVE_PORTAL_CONFIG_ID=bpc_1UZqUZBGa8rL8jwIrmBsxuO0`
-- `STRIPE_LIVE_PORTAL_LOGIN_URL=https://billing.stripe.com/p/login/7sYaEW1Q36DN9Km1GN93y00`
-- `STRIPE_LIVE_WEBHOOK_SECRET` = Secret
-- `REFUND_POLICY_CONFIRMED=true`
-- `LIVE_BILLING_ENABLED=false` のまま設定を完了する
+Secret値はGitHub・README・Issue・PR・チャットへ保存しない。
 
-Secret値はGitHub・README・チャットへ保存しない。
+現在の公開 `/api/commercial-readiness` は `environment=test` / `ready_for_live=false` で、PRE-LAUNCHロックにより公開TEST Checkoutも停止しています。
 
-### 2. Stripeアカウント公開表示
+有効なLive Secret設定後も `environment=test` の場合のみ、Cloudflareに旧 `LIVE_BILLING_ENABLED=false` が残っていないか確認してください。
 
-アカウント既定のstatement descriptorに個人名が残っている。DemandScope Productには `DEMANDSCOPE` を設定済みでSubscriptionではProduct descriptorが優先されるが、日本のカード発行会社による表示差があるため、一般公開前にStripeの公開ブランド名・日本語明細表示を確認する。
+### 2. Stripe明細表示
 
-### 3. 最終Live E2E
+DemandScope Productには `DEMANDSCOPE` の statement descriptor を設定済み。Subscription課金ではProduct descriptorを利用するため、アカウント全体の既定descriptor変更は販売開始条件にしない。
 
-1. Cloudflare LIVE variables/secrets設定
-2. `/api/commercial-readiness` 確認
-3. `LIVE_BILLING_ENABLED=true`
-4. Stripe Checkoutが **DemandScope Pro / 980円 / 月額** と表示することを確認
-5. 実カードで1件だけ本番購入
-6. Checkout完了 → 同一ブラウザPro開放
-7. Webhook backlog=0
-8. Customer Portalを直接開ける
-9. Portalメールログインが購入メールで機能
-10. cancel_at_period_end
-11. 契約期間末までProが有効
-12. 次回請求停止を確認
+カード発行会社がStripeから送られたdescriptorとは異なる独自のfriendly merchant nameを表示する場合があるため、銀行アプリ上の表示差は販売ゲートではなく運用監視項目として扱う。
+
+### 3. 最終Live Gate
+
+1. Productionの2つのLive Stripe Secretを設定
+2. 最新mainがCloudflare Pages Productionへ反映済みか確認
+3. `/api/commercial-readiness` を確認
+4. `environment=live`
+5. `ready_for_live=true`
+6. Live Price = **DemandScope Pro / 980円 / 月額**
+7. Stripe account charges / payouts / details submitted = true
+8. live webhook secret = true
+9. D1 schema = true / webhook backlog = 0
+10. Google OAuth configured = true
+11. capacity limit = 25
+
+Owner自身の実カード自己購入は必須条件から除外する。最初の実顧客取引を Checkout → Subscription → Webhook → entitlement → Portal のproduction validationとして監視する。
 
 ## SALE_READY条件
 
 - GitHub Checks PASS
+- Cloudflare Productionが最新mainを配信
+- 公開TEST CheckoutがPRE-LAUNCH中は停止
+- 初期Pro販売枠25名 + 同一member重複予約防止
 - Cloudflare Production PASS
 - Stripe Price = JPY 980/month
 - Stripe payout可能

@@ -1,3 +1,4 @@
+import {claimDemandScopeReservation,releaseDemandScopeMemberReservations} from './capacity.js';
 function id(value,prefix){return typeof value==='string'&&value.startsWith(prefix)?value:null}
 function firstPrice(sub){const item=sub?.items?.data?.[0];return id(item?.price?.id,'price_')}
 function periodEnd(sub){const candidates=[sub?.current_period_end,sub?.items?.data?.[0]?.current_period_end];for(const v of candidates)if(Number.isInteger(v)&&v>0)return v;return null}
@@ -10,7 +11,8 @@ export function checkoutAcceptanceFromEvent(event){
  const version=typeof obj.metadata?.legal_version==='string'?obj.metadata.legal_version:null;
  const acceptedAt=Number(obj.metadata?.legal_accepted_at);
  if(!session||!version||!Number.isInteger(acceptedAt)||acceptedAt<=0)return null;
- return {session,customer,subscription,memberId:memberId(obj.metadata?.member_id),legalVersion:version,acceptedAt,livemode:obj.livemode===true};
+ const reservationId=typeof obj.metadata?.capacity_reservation_id==='string'&&/^cap_[0-9a-f-]{36}$/i.test(obj.metadata.capacity_reservation_id)?obj.metadata.capacity_reservation_id:null;
+ return {session,customer,subscription,memberId:memberId(obj.metadata?.member_id),legalVersion:version,acceptedAt,livemode:obj.livemode===true,...(reservationId?{reservationId}: {})};
 }
 
 export function subscriptionMutationFromEvent(event){
@@ -36,6 +38,7 @@ export async function persistStripeEvent(db,event){
  const acceptance=checkoutAcceptanceFromEvent(event);
  try{
   if(acceptance){
+   if(acceptance.reservationId&&acceptance.memberId)await claimDemandScopeReservation(db,{reservationId:acceptance.reservationId,memberId:acceptance.memberId});
    await db.prepare(`INSERT OR IGNORE INTO checkout_acceptances(stripe_checkout_session_id,stripe_customer_id,stripe_subscription_id,legal_version,accepted_at,livemode,member_id)
 VALUES(?,?,?,?,?,?,?)`).bind(acceptance.session,acceptance.customer,acceptance.subscription,acceptance.legalVersion,acceptance.acceptedAt,acceptance.livemode?1:0,acceptance.memberId).run();
    if(acceptance.memberId&&acceptance.customer){
@@ -51,6 +54,7 @@ stripe_customer_id=excluded.stripe_customer_id,member_id=COALESCE(excluded.membe
 current_period_end=COALESCE(excluded.current_period_end,subscriptions.current_period_end),
 cancel_at_period_end=excluded.cancel_at_period_end,livemode=excluded.livemode,updated_at=CURRENT_TIMESTAMP`)
     .bind(mutation.subscription,mutation.customer,mutation.memberId,mutation.status,mutation.price,mutation.currentPeriodEnd,mutation.cancelAtPeriodEnd?1:0,mutation.livemode?1:0).run();
+   if(mutation.memberId&&mutation.livemode&&['active','trialing'].includes(mutation.status))await releaseDemandScopeMemberReservations(db,mutation.memberId);
   }
   await db.prepare('UPDATE stripe_events SET processed_at=CURRENT_TIMESTAMP,last_error=NULL WHERE event_id=?').bind(event.id).run();
   return {duplicate:false,mutation,acceptance};

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {subscriptionMutationFromEvent,checkoutAcceptanceFromEvent} from '../server/subscription-store.js';
+import {DEMANDSCOPE_PRO_CAPACITY} from '../server/capacity.js';
 
 test('subscription webhook snapshot extracts durable billing state',()=>{
  const m=subscriptionMutationFromEvent({
@@ -64,4 +65,20 @@ test('Stripe checkout metadata links authenticated member to durable consent wit
 test('member-link D1 migration is present',()=>{
  const sql=readFileSync(new URL('../migrations/0003_member_stripe_link.sql',import.meta.url),'utf8');
  assert.match(sql,/checkout_acceptances ADD COLUMN member_id/);assert.match(sql,/idx_legal_acceptance_unique/);
+});
+
+
+test('launch capacity is capped at 25 paid Pro seats',()=>{
+ assert.equal(DEMANDSCOPE_PRO_CAPACITY,25);
+ const sql=readFileSync(new URL('../migrations/0004_launch_capacity.sql',import.meta.url),'utf8');
+ assert.match(sql,/CREATE TABLE IF NOT EXISTS capacity_reservations/);
+ assert.match(sql,/expires_at INTEGER NOT NULL/);
+});
+
+test('checkout completion preserves capacity reservation evidence when present',()=>{
+ const a=checkoutAcceptanceFromEvent({type:'checkout.session.completed',data:{object:{
+  id:'cs_live_capacity',mode:'subscription',customer:'cus_capacity',subscription:'sub_capacity',livemode:true,
+  metadata:{member_id:'member_12345678',legal_version:'2026-11-10',legal_accepted_at:'1794192222',capacity_reservation_id:'cap_12345678-1234-1234-1234-123456789abc'}
+ }}});
+ assert.equal(a.reservationId,'cap_12345678-1234-1234-1234-123456789abc');
 });

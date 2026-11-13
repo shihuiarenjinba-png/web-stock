@@ -7,11 +7,13 @@ const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
 let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null,googleSession=null,capacityState={limit:25,remaining:null,sold_out:false};
 const KEY='demandscope_pro_skus_v1';
 function liveBilling(){return stripeHealth?.mode==='live'}
+function publicPreliveLocked(){return location.origin==='https://web-stock-78r.pages.dev'&&!liveBilling()}
 function syncCheckoutDisabled(){
  const checkout=$('checkout');if(!checkout)return;
  const authBlocked=googleSession?.configured===true&&googleSession?.authenticated!==true;
  const capacityBlocked=liveBilling()&&capacityState?.sold_out===true;
- checkout.disabled=authBlocked||capacityBlocked;
+ const preliveBlocked=publicPreliveLocked();
+ checkout.disabled=authBlocked||capacityBlocked||preliveBlocked;
 }
 function renderCapacity(){
  const el=$('capacityStatus');if(!el)return;
@@ -31,11 +33,12 @@ async function checkCapacity(){
 }
 function applyBillingMode(){
  const live=liveBilling();
- const badge=$('billingModeBadge');if(badge)badge.textContent=live?'PRO PLAN · LIVE':'PRO PLAN · TEST MODE';
- const label=$('billingPlanLabel');if(label)label.textContent=live?'Pro 月額プラン':'テスト月額プラン';
- const price=$('billingPlanPrice');if(price)price.textContent=live?(lang()==='en'?'JPY 980 / month':'980円/月'):'100円/月（Stripeテストモード・実請求なし）';
- const renewal=$('billingPlanRenewal');if(renewal)renewal.textContent=live?(lang()==='en'?'Monthly auto-renewal. You can cancel from Stripe subscription management.':'月額自動更新。Stripe契約管理画面から解約できます。'):'月額自動更新の動作確認用。解約はStripe契約管理画面から行えます。';
- const checkout=$('checkout');if(checkout&&!checkout.disabled)checkout.textContent=live?(lang()==='en'?'Continue to payment':'決済へ進む'):(lang()==='en'?'Open test checkout':'テスト決済へ進む');
+ const locked=publicPreliveLocked();
+ const badge=$('billingModeBadge');if(badge)badge.textContent=live?'PRO PLAN · LIVE':locked?'PRO PLAN · PRE-LAUNCH':'PRO PLAN · TEST MODE';
+ const label=$('billingPlanLabel');if(label)label.textContent=live?'Pro 月額プラン':locked?(lang()==='en'?'Pro launch preparation':'Pro 販売準備中'):'テスト月額プラン';
+ const price=$('billingPlanPrice');if(price)price.textContent=live?(lang()==='en'?'JPY 980 / month':'980円/月'):locked?(lang()==='en'?'JPY 980 / month — enrollment not open yet':'980円/月 — 現在は新規受付前'):'100円/月（Stripeテストモード・実請求なし）';
+ const renewal=$('billingPlanRenewal');if(renewal)renewal.textContent=live?(lang()==='en'?'Monthly auto-renewal. You can cancel from Stripe subscription management.':'月額自動更新。Stripe契約管理画面から解約できます。'):locked?(lang()==='en'?'Public checkout opens only after the live billing gate is green.':'本番課金ゲートがすべて通過するまで公開決済は開始しません。'):'月額自動更新の動作確認用。解約はStripe契約管理画面から行えます。';
+ const checkout=$('checkout');if(checkout&&!checkout.disabled)checkout.textContent=live?(lang()==='en'?'Continue to payment':'決済へ進む'):locked?(lang()==='en'?'Enrollment not open yet':'販売準備中'):(lang()==='en'?'Open test checkout':'テスト決済へ進む');
  const footer=$('billingFooterLabel');if(footer)footer.textContent=live?'DemandScope Pro':'DemandScope Pro — テスト開発版';
  renderCapacity();syncCheckoutDisabled();
 }

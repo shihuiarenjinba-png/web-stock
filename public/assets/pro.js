@@ -4,9 +4,31 @@ import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './imp
 import {initI18n,lang,t,errorMessage} from './i18n.js';
 import {printRiskReport} from './pdf-report.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
-let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null,googleSession=null;
+let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null,googleSession=null,capacityState={limit:25,remaining:null,sold_out:false};
 const KEY='demandscope_pro_skus_v1';
 function liveBilling(){return stripeHealth?.mode==='live'}
+function syncCheckoutDisabled(){
+ const checkout=$('checkout');if(!checkout)return;
+ const authBlocked=googleSession?.configured===true&&googleSession?.authenticated!==true;
+ const capacityBlocked=liveBilling()&&capacityState?.sold_out===true;
+ checkout.disabled=authBlocked||capacityBlocked;
+}
+function renderCapacity(){
+ const el=$('capacityStatus');if(!el)return;
+ const limit=Number(capacityState?.limit)||25;
+ if(!liveBilling()){el.textContent=lang()==='en'?`Initial Pro launch capacity: ${limit} seats`:`初期Pro販売枠: ${limit}名`;el.className='stripe-health';return;}
+ if(Number.isInteger(capacityState?.remaining)){
+  el.textContent=capacityState.sold_out
+   ?(lang()==='en'?`Initial Pro capacity is full (${limit} seats). New enrollment is paused.`:`初期Pro販売枠は満員です（${limit}名）。新規受付を一時停止しています。`)
+   :(lang()==='en'?`Initial Pro capacity: ${capacityState.remaining} / ${limit} seats remaining`:`初期Pro販売枠: 残り ${capacityState.remaining} / ${limit}名`);
+  el.className=capacityState.sold_out?'stripe-health bad':'stripe-health good';
+ }else{el.textContent=lang()==='en'?`Initial Pro launch capacity: ${limit} seats`:`初期Pro販売枠: ${limit}名`;el.className='stripe-health';}
+}
+async function checkCapacity(){
+ try{const res=await fetch('/api/commercial-readiness',{cache:'no-store'});const data=await res.json();capacityState=data.capacity||capacityState;}
+ catch{}
+ renderCapacity();syncCheckoutDisabled();return capacityState;
+}
 function applyBillingMode(){
  const live=liveBilling();
  const badge=$('billingModeBadge');if(badge)badge.textContent=live?'PRO PLAN · LIVE':'PRO PLAN · TEST MODE';
@@ -15,6 +37,7 @@ function applyBillingMode(){
  const renewal=$('billingPlanRenewal');if(renewal)renewal.textContent=live?(lang()==='en'?'Monthly auto-renewal. You can cancel from Stripe subscription management.':'月額自動更新。Stripe契約管理画面から解約できます。'):'月額自動更新の動作確認用。解約はStripe契約管理画面から行えます。';
  const checkout=$('checkout');if(checkout&&!checkout.disabled)checkout.textContent=live?(lang()==='en'?'Continue to payment':'決済へ進む'):(lang()==='en'?'Open test checkout':'テスト決済へ進む');
  const footer=$('billingFooterLabel');if(footer)footer.textContent=live?'DemandScope Pro':'DemandScope Pro — テスト開発版';
+ renderCapacity();syncCheckoutDisabled();
 }
 function warn(msg){$('proAlert').textContent=errorMessage(msg instanceof Error?msg:new Error(msg));$('proAlert').classList.remove('hidden')}
 function clearWarn(){$('proAlert').classList.add('hidden')}
@@ -67,10 +90,10 @@ async function checkGoogleSession(){
    state.textContent=lang()==='en'?'Sign in with Google to verify your identity before purchasing or restoring Pro.':'購入・Pro復旧の前にGoogleで本人確認してください。';
    login?.classList.remove('hidden');logout?.classList.add('hidden');
  }
- if(checkout&&googleSession.configured&&!googleSession.authenticated)checkout.disabled=true;
+ syncCheckoutDisabled();
  return googleSession;
 }
-async function boot(){try{await checkStripeHealth();await checkGoogleSession();await checkMagicLinkStatus();const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(liveBilling()?(lang()==='en'?'Payment verified':'決済を確認しました'):(lang()==='en'?'Test checkout verified':'テスト決済を確認しました'));}
+async function boot(){try{await checkStripeHealth();await checkGoogleSession();await checkCapacity();await checkMagicLinkStatus();const params=new URLSearchParams(location.search);if(params.has('session_id')){const sessionId=params.get('session_id');history.replaceState({},'',location.pathname);await call('/api/activate',{session_id:sessionId});toast(liveBilling()?(lang()==='en'?'Payment verified':'決済を確認しました'):(lang()==='en'?'Test checkout verified':'テスト決済を確認しました'));}
  if(params.get('checkout')==='cancelled'){history.replaceState({},'',location.pathname);warn('決済はキャンセルされました。');}
  if(params.get('magic')==='ok'){history.replaceState({},'',location.pathname);toast(lang()==='en'?'Pro access restored on this browser':'このブラウザでPro契約を復旧しました');}
  if(params.get('magic')==='invalid'){history.replaceState({},'',location.pathname);warn(lang()==='en'?'This login link is invalid or expired.':'本人確認リンクが無効または期限切れです。');}
@@ -91,7 +114,7 @@ $('checkout').addEventListener('click',async()=>{
   const x=await call('/api/checkout',{accept_terms:true,buyer_email:buyerEmail});
   if(!x.url)throw new Error(lang()==='en'?'Checkout URL was not returned.':'決済URLが返されませんでした。');location.assign(x.url)
  }
- catch(e){const message=e.message||String(e);warn(message);$('checkoutError').textContent=message;$('checkoutError').classList.remove('hidden');await checkStripeHealth();button.disabled=false;button.textContent=original}
+ catch(e){const message=e.message||String(e);warn(message);$('checkoutError').textContent=message;$('checkoutError').classList.remove('hidden');await checkStripeHealth();await checkCapacity();syncCheckoutDisabled();button.textContent=original}
 });
 $('portal').addEventListener('click',async()=>{try{const x=await call('/api/portal');location.assign(x.url)}catch(e){warn(e.message)}});
 $('sendMagicLink')?.addEventListener('click',async()=>{const email=$('recoveryEmail')?.value.trim()||'';const button=$('sendMagicLink'),message=$('magicLinkMessage');if(!$('recoveryEmail')?.checkValidity()||!email){message.textContent=lang()==='en'?'Enter the email used for purchase.':'購入時のメールアドレスを入力してください。';return}const original=button.textContent;button.disabled=true;button.textContent=lang()==='en'?'Sending…':'送信中…';try{const x=await call('/api/magic-link/request',{email});message.textContent=x.message|| (lang()==='en'?'If an active subscription exists, a login link will be sent.':'有効な契約が確認できる場合、本人確認リンクを送信します。')}catch(e){message.textContent=e.message||String(e)}finally{button.disabled=false;button.textContent=original}});

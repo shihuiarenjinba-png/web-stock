@@ -75,6 +75,15 @@ test('launch capacity is capped at 25 paid Pro seats',()=>{
  assert.match(sql,/expires_at INTEGER NOT NULL/);
 });
 
+test('capacity reservation is unique per member and product',()=>{
+ const sql=readFileSync(new URL('../migrations/0005_capacity_reservation_dedupe.sql',import.meta.url),'utf8');
+ assert.match(sql,/CREATE UNIQUE INDEX IF NOT EXISTS idx_capacity_member_product_unique/);
+ assert.match(sql,/member_id,product_key/);
+ const source=readFileSync(new URL('../server/capacity.js',import.meta.url),'utf8');
+ assert.match(source,/INSERT OR IGNORE INTO capacity_reservations/);
+ assert.match(source,/SELECT reservation_id,expires_at FROM capacity_reservations WHERE member_id=/);
+});
+
 test('checkout completion preserves capacity reservation evidence when present',()=>{
  const a=checkoutAcceptanceFromEvent({type:'checkout.session.completed',data:{object:{
   id:'cs_live_capacity',mode:'subscription',customer:'cus_capacity',subscription:'sub_capacity',livemode:true,

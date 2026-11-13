@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState,TEST_MONTHLY_JPY,LIVE_MONTHLY_JPY,LIVE_PRO_PRICE_ID,LIVE_PORTAL_LOGIN_URL,configurationMissing,billingMode,activePriceId,expectedLivemode,validateLivePriceObject,verifyLivePrice} from '../server/stripe.js';
+import {isConfigured,issueCookie,entitlement,verifiedSubscription,checkoutBrowserState,TEST_MONTHLY_JPY,LIVE_MONTHLY_JPY,LIVE_PRO_PRICE_ID,LIVE_APP_ORIGIN,LIVE_PORTAL_LOGIN_URL,configurationMissing,billingMode,activePriceId,expectedLivemode,validateLivePriceObject,verifyLivePrice,isPublicProductionRequest} from '../server/stripe.js';
 import {onRequestPost as checkout} from '../functions/api/checkout.js';
 import {onRequestPost as activate} from '../functions/api/activate.js';
 import {onRequestGet as verify} from '../functions/api/entitlement.js';
@@ -20,6 +20,19 @@ test('live price validator requires active DemandScope Pro JPY 980 monthly',()=>
  assert.equal(validateLivePriceObject({...good,product:{active:true,metadata:{app:'other',tier:'pro'}}}).reason,'product_metadata');
 });
 test('reject wrong origin before Stripe',async()=>{const res=await checkout({request:request('/api/checkout','https://evil.test',{}),env});assert.equal(res.status,403)});
+test('public production origin never exposes TEST checkout before LIVE cutover',async()=>{
+ const req=new Request(LIVE_APP_ORIGIN+'/api/checkout',{method:'POST',headers:{Origin:LIVE_APP_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({accept_terms:true,buyer_email:'buyer@example.com'})});
+ assert.equal(isPublicProductionRequest(req),true);
+ const old=globalThis.fetch;let called=false;
+ try{
+  globalThis.fetch=async()=>{called=true;return new Response('{}')};
+  const res=await checkout({request:req,env:{...env,APP_ORIGIN:LIVE_APP_ORIGIN}});
+  const body=await res.json();
+  assert.equal(res.status,503);
+  assert.equal(body.code,'production_prelive_locked');
+  assert.equal(called,false);
+ }finally{globalThis.fetch=old}
+});
 test('configured APP_ORIGIN blocks checkout from an alternate host',async()=>{
  const old=globalThis.fetch;let called=false;
  try{

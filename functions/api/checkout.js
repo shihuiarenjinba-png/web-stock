@@ -1,10 +1,11 @@
-import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError,billingMode,activePriceId,verifyLivePrice} from '../../server/stripe.js';
+import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError,billingMode,activePriceId,verifyLivePrice,isPublicProductionRequest} from '../../server/stripe.js';
 import {LEGAL_VERSION} from '../../server/legal.js';
 import {authenticatedMember,googleConfiguration} from '../../server/google-auth.js';
 import {reserveDemandScopeCapacity,releaseDemandScopeReservation} from '../../server/capacity.js';
 function validBuyerEmail(value){return typeof value==='string'&&value.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)}
 export async function onRequestPost({request,env}){
  const mode=billingMode(env),priceId=activePriceId(env);
+ if(mode!=='live'&&isPublicProductionRequest(request))return json({error:'DemandScope Pro は販売開始直前のため、新規決済を一時停止しています。',code:'production_prelive_locked'},503);
  if(!isConfigured(env))return json({error:mode==='live'?'Stripe本番接続が未設定です。管理者の設定後に利用できます。':'Stripeテスト接続が未設定です。管理者の設定後に利用できます。'},503);
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
  let input={};try{input=await request.json()}catch{}

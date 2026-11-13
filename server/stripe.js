@@ -79,6 +79,9 @@ export async function verifyLivePrice(env){
  const price=await stripe(env,`/prices/${encodeURIComponent(priceId)}?expand[]=product`);
  return validateLivePriceObject(price);
 }
+export function isPublicProductionRequest(request){
+ try{return new URL(request.url).origin===LIVE_APP_ORIGIN}catch{return false}
+}
 function trustedRequestOrigin(request){
  if(!request)throw new Error('Request required');
  const value=new URL(request.url);

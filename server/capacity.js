@@ -18,6 +18,7 @@ export async function ensureCapacityTable(db){
   )`).run();
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_capacity_product ON capacity_reservations(product_key,expires_at)').run();
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_capacity_member ON capacity_reservations(member_id,product_key)').run();
+  await db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_capacity_member_product_unique ON capacity_reservations(member_id,product_key)').run();
 }
 async function cleanupExpired(db,now){await db.prepare('DELETE FROM capacity_reservations WHERE expires_at<=?').bind(now).run()}
 
@@ -38,16 +39,24 @@ export async function reserveDemandScopeCapacity(db,{memberId,priceId,now}){
   const existing=await db.prepare("SELECT stripe_subscription_id FROM subscriptions WHERE member_id=? AND livemode=1 AND price_id=? AND status IN ('active','trialing') LIMIT 1")
     .bind(memberId,priceId||'').first();
   if(existing?.stripe_subscription_id)return {ok:false,reason:'already_subscribed',snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
+  const prior=await db.prepare("SELECT reservation_id,expires_at FROM capacity_reservations WHERE member_id=? AND product_key='demand-scope-pro' AND expires_at>? LIMIT 1")
+    .bind(memberId,ts).first();
+  if(prior?.reservation_id)return {ok:true,reservationId:prior.reservation_id,expiresAt:Number(prior.expires_at)||ts+RESERVATION_TTL_SECONDS,reused:true,snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
   const reservationId='cap_'+crypto.randomUUID(),expiresAt=ts+RESERVATION_TTL_SECONDS;
-  const result=await db.prepare(`INSERT INTO capacity_reservations(reservation_id,member_id,product_key,status,expires_at)
+  const result=await db.prepare(`INSERT OR IGNORE INTO capacity_reservations(reservation_id,member_id,product_key,status,expires_at)
     SELECT ?,?,'demand-scope-pro','pending',?
     WHERE (
       (SELECT COUNT(*) FROM subscriptions WHERE livemode=1 AND price_id=? AND status IN ('active','trialing')) +
       (SELECT COUNT(*) FROM capacity_reservations WHERE product_key='demand-scope-pro' AND expires_at>?)
     ) < ?`)
     .bind(reservationId,memberId,expiresAt,priceId||'',ts,DEMANDSCOPE_PRO_CAPACITY).run();
-  if(changes(result)===0)return {ok:false,reason:'capacity_full',snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
-  return {ok:true,reservationId,expiresAt,snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
+  if(changes(result)===0){
+    const raced=await db.prepare("SELECT reservation_id,expires_at FROM capacity_reservations WHERE member_id=? AND product_key='demand-scope-pro' AND expires_at>? LIMIT 1")
+      .bind(memberId,ts).first();
+    if(raced?.reservation_id)return {ok:true,reservationId:raced.reservation_id,expiresAt:Number(raced.expires_at)||expiresAt,reused:true,snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
+    return {ok:false,reason:'capacity_full',snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
+  }
+  return {ok:true,reservationId,expiresAt,reused:false,snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
 }
 
 export async function releaseDemandScopeReservation(db,reservationId){

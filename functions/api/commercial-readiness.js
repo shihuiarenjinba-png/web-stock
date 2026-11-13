@@ -2,6 +2,7 @@ import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePr
 import {DEFAULT_DISCLOSURE_REQUEST_URL,REFUND_POLICY_CONFIRMED_IN_CODE,REAL_CARD_E2E_WAIVED_BY_OWNER} from '../../server/legal.js';
 import {authMailGatewayConfig,gatewayHealth} from '../../server/auth-mail-gateway.js';
 import {googleConfiguration} from '../../server/google-auth.js';
+import {DEMANDSCOPE_PRO_CAPACITY,demandScopeCapacity} from '../../server/capacity.js';
 
 export async function onRequestGet({env}){
  let d1SchemaOk=false,d1Error=null,webhookBacklog=null,webhookLastError=null,webhookLastEventType=null;
@@ -56,6 +57,10 @@ export async function onRequestGet({env}){
   account,
   live_price:livePrice
  };
+ let capacity={limit:DEMANDSCOPE_PRO_CAPACITY,active:null,reserved:null,used:null,remaining:null,sold_out:false,reserve_policy:'50_percent_headroom_from_50_concurrent_probe'};
+ if(mode==='live'&&billing.d1_binding&&billing.d1_schema_ok){
+  try{capacity={...(await demandScopeCapacity(env.DB,{priceId})),reserve_policy:'50_percent_headroom_from_50_concurrent_probe'}}catch{}
+ }
  const readyForBillingTest=mode==='test'&&billing.stripe_configured&&testWebhook&&billing.d1_binding&&billing.d1_schema_ok;
  const readyForUnattendedTest=readyForBillingTest;
  const legalReady=(legal.explicit_operator_details||legal.disclosure_on_request)&&legal.refund_policy_confirmed&&legal.support_channel;
@@ -68,8 +73,9 @@ export async function onRequestGet({env}){
  if(mode==='live'&&account.checked&&account.payouts_enabled!==true)notes.push('Stripe payouts must be enabled before live launch.');
  if(mode==='live'&&!google.configured)notes.push('Google OAuth must be fully configured before live sales.');
  if(mode==='live'&&!originReady)notes.push('APP_ORIGIN must be the exact canonical HTTPS origin before live sales.');
+ if(mode==='live'&&capacity.sold_out)notes.push('Launch capacity is full; existing subscribers keep access while new Checkout is paused.');
  const gatewayCfg=authMailGatewayConfig(env);const gateway=gatewayCfg.configured?await gatewayHealth(env):{reachable:false,ready:false,configured:false};
  const access={provider:'stripe',checkout_browser_activation:true,customer_portal_email_login:true,cross_device_app_login:gateway.ready===true,magic_link:{provider:'auth-mail-gateway',configured:gatewayCfg.configured,gateway_reachable:gateway.reachable===true,gateway_ready:gateway.ready===true,sender_domain:gateway.ready?gateway.sender_domain:null,ttl_minutes:10}};
  if(!gateway.ready)notes.push('Stripe Customer Portal handles billing only. Cross-device Pro restoration remains disabled until the shared Auth Mail Gateway is configured and ready.');
- return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,identity:{provider:'google',configured:google.configured,issues:google.issues,canonical_origin_ready:originReady,app_origin:appOrigin||null},access,legal,launch_evidence:{real_card_e2e_waived_by_owner:REAL_CARD_E2E_WAIVED_BY_OWNER===true},notes});
+ return json({environment:mode,ready_for_billing_test:readyForBillingTest,ready_for_unattended_test:readyForUnattendedTest,ready_for_live:readyForLive,billing,capacity,identity:{provider:'google',configured:google.configured,issues:google.issues,canonical_origin_ready:originReady,app_origin:appOrigin||null},access,legal,launch_evidence:{real_card_e2e_waived_by_owner:REAL_CARD_E2E_WAIVED_BY_OWNER===true},notes});
 }

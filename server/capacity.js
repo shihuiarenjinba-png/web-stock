@@ -3,7 +3,7 @@ const RESERVATION_TTL_SECONDS=30*60;
 const CLAIM_TTL_SECONDS=24*60*60;
 
 function nowSeconds(now){return Number.isInteger(now)?now:Math.floor(Date.now()/1000)}
-function changes(result){return Number(result?.meta?.changes??result?.changes??0)||0}
+function changes(result){const raw=result?.meta?.changes??result?.changes;return raw===undefined||raw===null?null:Number(raw)||0}
 function validMember(id){return typeof id==='string'&&/^[A-Za-z0-9_-]{8,64}$/.test(id)}
 
 export async function ensureCapacityTable(db){
@@ -46,7 +46,7 @@ export async function reserveDemandScopeCapacity(db,{memberId,priceId,now}){
       (SELECT COUNT(*) FROM capacity_reservations WHERE product_key='demand-scope-pro' AND expires_at>?)
     ) < ?`)
     .bind(reservationId,memberId,expiresAt,priceId||'',ts,DEMANDSCOPE_PRO_CAPACITY).run();
-  if(changes(result)<1)return {ok:false,reason:'capacity_full',snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
+  if(changes(result)===0)return {ok:false,reason:'capacity_full',snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
   return {ok:true,reservationId,expiresAt,snapshot:await demandScopeCapacity(db,{priceId,now:ts})};
 }
 

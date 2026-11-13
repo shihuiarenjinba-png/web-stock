@@ -160,15 +160,17 @@ for(const [label,overrides,pattern] of [
  });
 }
 
-test('Google configured checkout requires identity and binds member_id without equating Google email to billing email',async()=>{
+test('Google configured TEST checkout still works off the public production origin and binds member_id',async()=>{
  const {e,result,db}=await successfulIdentity();
- const noIdentity=new Request('https://web-stock-78r.pages.dev/api/checkout',{method:'POST',headers:{Origin:'https://web-stock-78r.pages.dev','Content-Type':'application/json'},body:JSON.stringify({accept_terms:true,buyer_email:'billing@example.net'})});
- const denied=await checkout({request:noIdentity,env:e});assert.equal(denied.status,401);
+ const testOrigin='https://checkout-test.example.com';
+ const testEnv={...e,APP_ORIGIN:testOrigin};
+ const noIdentity=new Request(testOrigin+'/api/checkout',{method:'POST',headers:{Origin:testOrigin,'Content-Type':'application/json'},body:JSON.stringify({accept_terms:true,buyer_email:'billing@example.net'})});
+ const denied=await checkout({request:noIdentity,env:testEnv});assert.equal(denied.status,401);
  const old=globalThis.fetch;let form;
  try{
   globalThis.fetch=async(_url,opt)=>{form=new URLSearchParams(opt.body);return new Response(JSON.stringify({url:'https://checkout.stripe.com/c/pay/google-member'}),{headers:{'content-type':'application/json'}})};
-  const request=new Request('https://web-stock-78r.pages.dev/api/checkout',{method:'POST',headers:{Origin:'https://web-stock-78r.pages.dev','Content-Type':'application/json',Cookie:firstCookie(result.cookie)},body:JSON.stringify({accept_terms:true,buyer_email:'billing@example.net'})});
-  const res=await checkout({request,env:e});assert.equal(res.status,200);
+  const request=new Request(testOrigin+'/api/checkout',{method:'POST',headers:{Origin:testOrigin,'Content-Type':'application/json',Cookie:firstCookie(result.cookie)},body:JSON.stringify({accept_terms:true,buyer_email:'billing@example.net'})});
+  const res=await checkout({request,env:testEnv});assert.equal(res.status,200);
   assert.equal(form.get('customer_email'),'billing@example.net');
   assert.equal(form.get('metadata[member_id]'),db.members[0].id);
   assert.equal(form.get('subscription_data[metadata][member_id]'),db.members[0].id);

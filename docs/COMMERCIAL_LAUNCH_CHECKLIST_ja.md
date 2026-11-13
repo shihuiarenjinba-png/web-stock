@@ -105,9 +105,11 @@ Secret値はGitHub・README・Issue・PR・チャットへ保存しない。
 
 有効なLive Secret設定後も `environment=test` の場合のみ、Cloudflareに旧 `LIVE_BILLING_ENABLED=false` が残っていないか確認してください。
 
-### 2. Stripeアカウント公開表示
+### 2. Stripe明細表示
 
-アカウント既定のstatement descriptorに個人名が残っている。DemandScope Productには `DEMANDSCOPE` を設定済みでSubscriptionではProduct descriptorが優先されるが、日本のカード発行会社による表示差があるため、一般公開前にStripeの公開ブランド名・日本語明細表示を確認する。
+DemandScope Productには `DEMANDSCOPE` の statement descriptor を設定済み。Subscription課金ではProduct descriptorを利用するため、アカウント全体の既定descriptor変更は販売開始条件にしない。
+
+カード発行会社がStripeから送られたdescriptorとは異なる独自のfriendly merchant nameを表示する場合があるため、銀行アプリ上の表示差は販売ゲートではなく運用監視項目として扱う。
 
 ### 3. 最終Live Gate
 

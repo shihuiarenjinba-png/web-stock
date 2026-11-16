@@ -9,7 +9,7 @@ const KEY='demandscope_pro_skus_v1';
 function liveBilling(){return stripeHealth?.mode==='live'}
 function selectedPlan(){return $('planChoice')?.value||'bundle'}
 function selectedPlanPrice(plan=selectedPlan()){return plan==='bundle'?1800:980}
-function planLabel(plan=selectedPlan()){return plan==='inventory'?'Inventory':plan==='markdown'?'Markdown Decision':'Bundle'}
+function planLabel(plan=selectedPlan()){return plan==='inventory'?'Inventory':plan==='markdown'?'Markdown Decision':plan==='combined'?'Inventory + Markdown':'Bundle'}
 function applyCapabilityVisibility(){
  const inventory=currentCapabilities.includes('inventory'),markdown=currentCapabilities.includes('markdown');
  document.querySelectorAll('.inventory-only').forEach(el=>el.classList.toggle('hidden',!inventory));

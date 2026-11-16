@@ -10,7 +10,7 @@ export const LIVE_BUNDLE_MONTHLY_JPY=1800;
 export const LIVE_INVENTORY_PRICE_ID='price_1Ua2NWBGa8rL8jwIKk7Tbtas';
 export const LIVE_MARKDOWN_PRICE_ID='price_1UcK5FBGa8rL8jwIHXsLDQJE';
 export const LIVE_BUNDLE_PRICE_ID='price_1UcK5GBGa8rL8jwIwinMXtj8';
-export const LIVE_MONTHLY_JPY=LIVE_BUNDLE_MONTHLY_JPY;
+export const LIVE_MONTHLY_JPY=LIVE_INVENTORY_MONTHLY_JPY;
 export const LIVE_PRO_PRICE_ID=LIVE_BUNDLE_PRICE_ID;
 export const LIVE_APP_ORIGIN='https://web-stock-78r.pages.dev';
 export const LIVE_PORTAL_CONFIG_ID='bpc_1UZqUZBGa8rL8jwIrmBsxuO0';
@@ -51,9 +51,9 @@ export function planDefinition(plan='bundle'){
 }
 export function activePriceId(env,plan='bundle'){
  if(billingMode(env)==='live'){
-  if(plan==='inventory')return normalizedValue(env?.STRIPE_LIVE_INVENTORY_PRICE_ID)||LIVE_INVENTORY_PRICE_ID;
+  if(plan==='inventory')return normalizedValue(env?.STRIPE_LIVE_INVENTORY_PRICE_ID||env?.STRIPE_LIVE_PRO_PRICE_ID)||LIVE_INVENTORY_PRICE_ID;
   if(plan==='markdown')return normalizedValue(env?.STRIPE_LIVE_MARKDOWN_PRICE_ID)||LIVE_MARKDOWN_PRICE_ID;
-  return normalizedValue(env?.STRIPE_LIVE_BUNDLE_PRICE_ID||env?.STRIPE_LIVE_PRO_PRICE_ID)||LIVE_BUNDLE_PRICE_ID;
+  return normalizedValue(env?.STRIPE_LIVE_BUNDLE_PRICE_ID)||LIVE_BUNDLE_PRICE_ID;
  }
  return normalizedValue(env?.STRIPE_PRO_PRICE_ID);
 }
@@ -102,7 +102,7 @@ export function validateLivePriceObject(price,{expectedAmount=LIVE_INVENTORY_MON
  if(!product||typeof product!=='object')return {ok:false,reason:'product_not_expanded'};
  if(product.active!==true)return {ok:false,reason:'product_inactive'};
  if(product.metadata?.app!=='demand-scope-pro')return {ok:false,reason:'product_metadata'};
- if(expectedCapability&&price.metadata?.capability!==expectedCapability)return {ok:false,reason:'price_metadata'};
+ if(expectedCapability&&price.metadata?.capability&&price.metadata.capability!==expectedCapability)return {ok:false,reason:'price_metadata'};
  return {ok:true,reason:null,price};
 }
 export async function verifyLivePrice(env,plan='bundle'){

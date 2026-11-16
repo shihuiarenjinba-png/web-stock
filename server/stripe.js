@@ -4,8 +4,14 @@ export function json(body,status=200,headers={}) {const h=new Headers({'Content-
 // Billing defaults to TEST. Live billing is enabled only when LIVE_BILLING_ENABLED=true
 // AND a dedicated live Stripe key + live recurring Price ID are configured.
 export const TEST_MONTHLY_JPY=100;
-export const LIVE_MONTHLY_JPY=980;
-export const LIVE_PRO_PRICE_ID='price_1Ua2NWBGa8rL8jwIKk7Tbtas';
+export const LIVE_INVENTORY_MONTHLY_JPY=980;
+export const LIVE_MARKDOWN_MONTHLY_JPY=980;
+export const LIVE_BUNDLE_MONTHLY_JPY=1800;
+export const LIVE_INVENTORY_PRICE_ID='price_1Ua2NWBGa8rL8jwIKk7Tbtas';
+export const LIVE_MARKDOWN_PRICE_ID='price_1UcK5FBGa8rL8jwIHXsLDQJE';
+export const LIVE_BUNDLE_PRICE_ID='price_1UcK5GBGa8rL8jwIwinMXtj8';
+export const LIVE_MONTHLY_JPY=LIVE_BUNDLE_MONTHLY_JPY;
+export const LIVE_PRO_PRICE_ID=LIVE_BUNDLE_PRICE_ID;
 export const LIVE_APP_ORIGIN='https://web-stock-78r.pages.dev';
 export const LIVE_PORTAL_CONFIG_ID='bpc_1UZqUZBGa8rL8jwIrmBsxuO0';
 export const LIVE_PORTAL_LOGIN_URL='https://billing.stripe.com/p/login/7sYaEW1Q36DN9Km1GN93y00';
@@ -35,10 +41,36 @@ export function activeStripeKey(env){
   ?normalizedSecret(env?.STRIPE_LIVE_SECRET_KEY)
   :normalizedSecret(env?.STRIPE_TEST_SECRET_KEY||env?.STRIPE_SECRET_KEY);
 }
-export function activePriceId(env){
- return billingMode(env)==='live'
-  ?(normalizedValue(env?.STRIPE_LIVE_PRO_PRICE_ID)||LIVE_PRO_PRICE_ID)
-  :normalizedValue(env?.STRIPE_PRO_PRICE_ID);
+export const DEMANDSCOPE_PLANS={
+ inventory:{key:'inventory',priceId:LIVE_INVENTORY_PRICE_ID,amount:LIVE_INVENTORY_MONTHLY_JPY,capabilities:['inventory']},
+ markdown:{key:'markdown',priceId:LIVE_MARKDOWN_PRICE_ID,amount:LIVE_MARKDOWN_MONTHLY_JPY,capabilities:['markdown']},
+ bundle:{key:'bundle',priceId:LIVE_BUNDLE_PRICE_ID,amount:LIVE_BUNDLE_MONTHLY_JPY,capabilities:['inventory','markdown']}
+};
+export function planDefinition(plan='bundle'){
+ return DEMANDSCOPE_PLANS[String(plan||'').toLowerCase()]||null;
+}
+export function activePriceId(env,plan='bundle'){
+ if(billingMode(env)==='live'){
+  if(plan==='inventory')return normalizedValue(env?.STRIPE_LIVE_INVENTORY_PRICE_ID)||LIVE_INVENTORY_PRICE_ID;
+  if(plan==='markdown')return normalizedValue(env?.STRIPE_LIVE_MARKDOWN_PRICE_ID)||LIVE_MARKDOWN_PRICE_ID;
+  return normalizedValue(env?.STRIPE_LIVE_BUNDLE_PRICE_ID||env?.STRIPE_LIVE_PRO_PRICE_ID)||LIVE_BUNDLE_PRICE_ID;
+ }
+ return normalizedValue(env?.STRIPE_PRO_PRICE_ID);
+}
+export function activeLivePriceIds(env){
+ return ['inventory','markdown','bundle'].map(plan=>activePriceId(env,plan)).filter(Boolean);
+}
+export function capabilitiesForPriceId(env,priceId){
+ if(billingMode(env)!=='live')return ['inventory','markdown'];
+ for(const plan of ['inventory','markdown','bundle']){
+  if(activePriceId(env,plan)===priceId)return planDefinition(plan).capabilities;
+ }
+ return [];
+}
+export function planForPriceId(env,priceId){
+ if(billingMode(env)!=='live')return 'bundle';
+ for(const plan of ['inventory','markdown','bundle'])if(activePriceId(env,plan)===priceId)return plan;
+ return null;
 }
 export function configurationDiagnostics(env){
  const issues=[],mode=billingMode(env),keyName=mode==='live'?'STRIPE_LIVE_SECRET_KEY':'STRIPE_SECRET_KEY';
@@ -50,9 +82,9 @@ export function configurationDiagnostics(env){
  const sessionSecret=normalizedSecret(env?.SESSION_SECRET);
  if(sessionSecret.length===0)issues.push({name:'SESSION_SECRET',reason:'missing'});
  else if(sessionSecret.length<32)issues.push({name:'SESSION_SECRET',reason:'too_short'});
- const priceId=activePriceId(env),priceName=mode==='live'?'STRIPE_LIVE_PRO_PRICE_ID':'STRIPE_PRO_PRICE_ID';
- if(mode==='live'&&!priceId)issues.push({name:priceName,reason:'missing'});
- else if(priceId&&!/^price_[A-Za-z0-9]+$/.test(priceId))issues.push({name:priceName,reason:'invalid_format'});
+ const priceIds=mode==='live'?activeLivePriceIds(env):[activePriceId(env)].filter(Boolean);
+ if(mode==='live'&&priceIds.length!==3)issues.push({name:'STRIPE_LIVE_PLAN_PRICE_IDS',reason:'missing'});
+ for(const priceId of priceIds)if(!/^price_[A-Za-z0-9]+$/.test(priceId))issues.push({name:mode==='live'?'STRIPE_LIVE_PLAN_PRICE_IDS':'STRIPE_PRO_PRICE_ID',reason:'invalid_format'});
  const appOrigin=normalizedValue(env?.APP_ORIGIN)||(mode==='live'?LIVE_APP_ORIGIN:'');
  if(mode==='live'&&!appOrigin)issues.push({name:'APP_ORIGIN',reason:'missing'});
  else if(appOrigin&&!configuredOrigin(env))issues.push({name:'APP_ORIGIN',reason:'invalid_origin'});
@@ -60,24 +92,31 @@ export function configurationDiagnostics(env){
 }
 export function configurationMissing(env){return [...new Set(configurationDiagnostics(env).map(x=>x.name))]}
 export function isConfigured(env){return configurationMissing(env).length===0}
-export function validateLivePriceObject(price){
+export function validateLivePriceObject(price,{expectedAmount=null,expectedCapability=null}={}){
  const product=price?.product;
  if(price?.livemode!==true)return {ok:false,reason:'not_live'};
  if(price?.active!==true)return {ok:false,reason:'inactive'};
  if(price?.currency!=='jpy')return {ok:false,reason:'currency'};
- if(price?.unit_amount!==LIVE_MONTHLY_JPY)return {ok:false,reason:'amount'};
+ if(expectedAmount!==null&&price?.unit_amount!==expectedAmount)return {ok:false,reason:'amount'};
  if(price?.recurring?.interval!=='month'||Number(price?.recurring?.interval_count||1)!==1)return {ok:false,reason:'interval'};
  if(!product||typeof product!=='object')return {ok:false,reason:'product_not_expanded'};
  if(product.active!==true)return {ok:false,reason:'product_inactive'};
- if(product.metadata?.app!=='demand-scope-pro'||product.metadata?.tier!=='pro')return {ok:false,reason:'product_metadata'};
+ if(product.metadata?.app!=='demand-scope-pro')return {ok:false,reason:'product_metadata'};
+ if(expectedCapability&&price.metadata?.capability!==expectedCapability)return {ok:false,reason:'price_metadata'};
  return {ok:true,reason:null,price};
 }
-export async function verifyLivePrice(env){
+export async function verifyLivePrice(env,plan='bundle'){
  if(billingMode(env)!=='live')return {ok:false,reason:'not_live_mode'};
- const priceId=activePriceId(env);
+ const def=planDefinition(plan);if(!def)return {ok:false,reason:'invalid_plan'};
+ const priceId=activePriceId(env,plan);
  if(!priceId)return {ok:false,reason:'missing'};
  const price=await stripe(env,`/prices/${encodeURIComponent(priceId)}?expand[]=product`);
- return validateLivePriceObject(price);
+ return validateLivePriceObject(price,{expectedAmount:def.amount,expectedCapability:plan});
+}
+export async function verifyAllLivePrices(env){
+ const results={};
+ for(const plan of ['inventory','markdown','bundle'])results[plan]=await verifyLivePrice(env,plan);
+ return {ok:Object.values(results).every(x=>x.ok),results};
 }
 export function isPublicProductionRequest(request){
  try{return new URL(request.url).origin===LIVE_APP_ORIGIN}catch{return false}
@@ -150,13 +189,16 @@ export async function verifiedSubscription(env,id,customer=null){
  const data=await stripe(env,`/subscriptions/${encodeURIComponent(id)}`);
  if(data.livemode!==expectedLivemode(env)||!['active','trialing'].includes(data.status)||data.metadata?.app!=='demand-scope-pro')return null;
  if(customer&&data.customer!==customer)return null;
- const priceId=activePriceId(env);
- const priced=(data.items?.data||[]).some(item=>{
+ let matchedPrice=null;
+ for(const item of data.items?.data||[]){
   const price=item.price||{};
-  if(priceId)return price.id===priceId;
-  return billingMode(env)==='test'&&price.currency==='jpy'&&price.unit_amount===TEST_MONTHLY_JPY&&price.recurring?.interval==='month';
- });
- return priced?data:null;
+  if(billingMode(env)==='live'&&activeLivePriceIds(env).includes(price.id)){matchedPrice=price;break}
+  if(billingMode(env)==='test'&&((activePriceId(env)&&price.id===activePriceId(env))||(!activePriceId(env)&&price.currency==='jpy'&&price.unit_amount===TEST_MONTHLY_JPY&&price.recurring?.interval==='month'))){matchedPrice=price;break}
+ }
+ if(!matchedPrice)return null;
+ data.demandScopePlan=planForPriceId(env,matchedPrice.id)||'bundle';
+ data.demandScopeCapabilities=capabilitiesForPriceId(env,matchedPrice.id);
+ return data;
 }
 export async function entitlement(request,env){if(!isConfigured(env))return null;const auth=await readCookie(request,env);if(!auth)return null;const sub=await verifiedSubscription(env,auth.sub,auth.customer);return sub?{customer:auth.customer,subscription:auth.sub,status:sub.status}:null}
 export async function verifyWebhook(payload,header,secret){if(!secret?.startsWith('whsec_')||!header)return false;const fields=Object.fromEntries(header.split(',').map(s=>s.split('=')));const ts=Number(fields.t);if(!Number.isInteger(ts)||Math.abs(Date.now()/1000-ts)>300)return false;const mac=await signature(`${ts}.${payload}`,secret);const hex=Array.from(unb64url(mac)).map(n=>n.toString(16).padStart(2,'0')).join('');return header.split(',').some(piece=>piece.startsWith('v1=')&&safeEqual(piece.slice(3),hex))}

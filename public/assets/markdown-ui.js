@@ -17,6 +17,7 @@ function render(result){
 $('markdownForm')?.addEventListener('submit',e=>{
  e.preventDefault();
  try{
+  if(!Array.isArray(globalThis.demandScopeCapabilities)||!globalThis.demandScopeCapabilities.includes('markdown'))throw new Error('値下げ判断を利用できる契約が必要です。');
   const discounts=$('markdownDiscounts').value.split(/[\s,，、;；]+/).filter(Boolean).map(x=>Number(x)/100);
   const r=analyzeMarkdownHistory({
     history:$('markdownHistory').value,

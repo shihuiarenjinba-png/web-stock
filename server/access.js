@@ -9,7 +9,7 @@ async function memberEntitlement(request,env){
    for(const row of rows?.results||[]){
      try{
        const sub=await verifiedSubscription(env,row.stripe_subscription_id,row.stripe_customer_id||member.stripe_customer_id||null);
-       if(sub)return {customer:row.stripe_customer_id||member.stripe_customer_id,subscription:row.stripe_subscription_id,status:sub.status,source:'google',member_id:member.id};
+       if(sub)return {customer:row.stripe_customer_id||member.stripe_customer_id,subscription:row.stripe_subscription_id,status:sub.status,source:'google',member_id:member.id,plan:sub.demandScopePlan,capabilities:sub.demandScopeCapabilities};
      }catch{}
    }
  }
@@ -19,7 +19,7 @@ async function memberEntitlement(request,env){
      for(const candidate of list?.data||[]){
        if(!['active','trialing'].includes(candidate?.status)||candidate?.metadata?.app!=='demand-scope-pro')continue;
        const sub=await verifiedSubscription(env,candidate.id,member.stripe_customer_id);
-       if(sub)return {customer:member.stripe_customer_id,subscription:candidate.id,status:sub.status,source:'google',member_id:member.id};
+       if(sub)return {customer:member.stripe_customer_id,subscription:candidate.id,status:sub.status,source:'google',member_id:member.id,plan:sub.demandScopePlan,capabilities:sub.demandScopeCapabilities};
      }
    }catch{}
  }

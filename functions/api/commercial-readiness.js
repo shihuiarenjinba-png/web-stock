@@ -1,4 +1,4 @@
-import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId,verifyLivePrice,LIVE_MONTHLY_JPY,LIVE_APP_ORIGIN} from '../../server/stripe.js';
+import {json,configurationDiagnostics,billingMode,stripe,StripeApiError,activePriceId,verifyAllLivePrices,LIVE_BUNDLE_MONTHLY_JPY,LIVE_APP_ORIGIN,activeLivePriceIds} from '../../server/stripe.js';
 import {DEFAULT_DISCLOSURE_REQUEST_URL,REFUND_POLICY_CONFIRMED_IN_CODE,REAL_CARD_E2E_WAIVED_BY_OWNER} from '../../server/legal.js';
 import {authMailGatewayConfig,gatewayHealth} from '../../server/auth-mail-gateway.js';
 import {googleConfiguration} from '../../server/google-auth.js';
@@ -32,12 +32,12 @@ export async function onRequestGet({env}){
  const testWebhook=typeof (env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET)==='string'&&(env.STRIPE_TEST_WEBHOOK_SECRET||env.STRIPE_WEBHOOK_SECRET).startsWith('whsec_');
  const liveWebhook=typeof env.STRIPE_LIVE_WEBHOOK_SECRET==='string'&&env.STRIPE_LIVE_WEBHOOK_SECRET.startsWith('whsec_');
  let account={checked:false,charges_enabled:null,payouts_enabled:null,details_submitted:null,error:null};
- let livePrice={checked:false,verified:false,reason:null,expected_jpy:LIVE_MONTHLY_JPY};
+ let livePrice={checked:false,verified:false,reason:null,expected_jpy:LIVE_BUNDLE_MONTHLY_JPY,plans:null};
  if(mode==='live'&&stripeIssues.length===0){try{
-   const [a,p]=await Promise.all([stripe(env,'/account'),verifyLivePrice(env)]);
+   const [a,p]=await Promise.all([stripe(env,'/account'),verifyAllLivePrices(env)]);
    account={checked:true,charges_enabled:a.charges_enabled===true,payouts_enabled:a.payouts_enabled===true,details_submitted:a.details_submitted===true,error:null};
-   livePrice={checked:true,verified:p.ok===true,reason:p.reason||null,expected_jpy:LIVE_MONTHLY_JPY};
- }catch(e){account.error=e instanceof StripeApiError?(e.code||e.message):String(e?.message||e).slice(0,160);livePrice={checked:true,verified:false,reason:'stripe_error',expected_jpy:LIVE_MONTHLY_JPY}}}
+   livePrice={checked:true,verified:p.ok===true,reason:p.ok?null:'one_or_more_plan_prices_invalid',expected_jpy:LIVE_BUNDLE_MONTHLY_JPY,plans:p.results};
+ }catch(e){account.error=e instanceof StripeApiError?(e.code||e.message):String(e?.message||e).slice(0,160);livePrice={checked:true,verified:false,reason:'stripe_error',expected_jpy:LIVE_BUNDLE_MONTHLY_JPY,plans:null}}}
  const google=googleConfiguration(env);
  const appOrigin=(typeof env.APP_ORIGIN==='string'&&env.APP_ORIGIN.trim())|| (mode==='live'?LIVE_APP_ORIGIN:'');
  const originReady=mode!=='live'||(/^https:\/\//.test(appOrigin)&&!appOrigin.endsWith('/'));
@@ -59,7 +59,7 @@ export async function onRequestGet({env}){
  };
  let capacity={limit:DEMANDSCOPE_PRO_CAPACITY,active:null,reserved:null,used:null,remaining:null,sold_out:false,reserve_policy:'50_percent_headroom_from_50_concurrent_probe'};
  if(mode==='live'&&billing.d1_binding&&billing.d1_schema_ok){
-  try{capacity={...(await demandScopeCapacity(env.DB,{priceId})),reserve_policy:'50_percent_headroom_from_50_concurrent_probe'}}catch{}
+  try{capacity={...(await demandScopeCapacity(env.DB,{priceId,priceIds:activeLivePriceIds(env)})),reserve_policy:'50_percent_headroom_from_50_concurrent_probe'}}catch{}
  }
  const readyForBillingTest=mode==='test'&&billing.stripe_configured&&testWebhook&&billing.d1_binding&&billing.d1_schema_ok;
  const readyForUnattendedTest=readyForBillingTest;
@@ -68,7 +68,7 @@ export async function onRequestGet({env}){
  const notes=[];
  if(mode!=='live')notes.push('Live billing is still gated off.');
  if(!priceId&&mode==='live')notes.push('A live recurring Stripe Price ID is required.');
- if(mode==='live'&&livePrice.checked&&!livePrice.verified)notes.push('Live Price must be an active DemandScope Pro JPY 980 monthly price.');
+ if(mode==='live'&&livePrice.checked&&!livePrice.verified)notes.push('All three live DemandScope plan prices must be active and match Inventory JPY 980 / Markdown JPY 980 / Bundle JPY 1800 monthly.');
  if(!legal.refund_policy_confirmed)notes.push('Refund policy must be explicitly confirmed before live sales.');
  if(mode==='live'&&account.checked&&account.payouts_enabled!==true)notes.push('Stripe payouts must be enabled before live launch.');
  if(mode==='live'&&!google.configured)notes.push('Google OAuth must be fully configured before live sales.');

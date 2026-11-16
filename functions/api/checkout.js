@@ -9,7 +9,7 @@ export async function onRequestPost({request,env}){
  if(!isConfigured(env))return json({error:mode==='live'?'Stripe本番接続が未設定です。管理者の設定後に利用できます。':'Stripeテスト接続が未設定です。管理者の設定後に利用できます。'},503);
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
  let input={};try{input=await request.json()}catch{}
- const plan=mode==='live'?String(input?.plan||'bundle').toLowerCase():'bundle';
+ const plan=mode==='live'?String(input?.plan||'inventory').toLowerCase():'bundle';
  const planDef=planDefinition(plan);if(!planDef)return json({error:'料金プランが不正です。'},400);
  const priceId=activePriceId(env,plan);
  const googleCfg=googleConfiguration(env);const member=await authenticatedMember(request,env);

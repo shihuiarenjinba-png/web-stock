@@ -200,5 +200,5 @@ export async function verifiedSubscription(env,id,customer=null){
  data.demandScopeCapabilities=capabilitiesForPriceId(env,matchedPrice.id);
  return data;
 }
-export async function entitlement(request,env){if(!isConfigured(env))return null;const auth=await readCookie(request,env);if(!auth)return null;const sub=await verifiedSubscription(env,auth.sub,auth.customer);return sub?{customer:auth.customer,subscription:auth.sub,status:sub.status}:null}
+export async function entitlement(request,env){if(!isConfigured(env))return null;const auth=await readCookie(request,env);if(!auth)return null;const sub=await verifiedSubscription(env,auth.sub,auth.customer);return sub?{customer:auth.customer,subscription:auth.sub,status:sub.status,plan:sub.demandScopePlan,capabilities:sub.demandScopeCapabilities}:null}
 export async function verifyWebhook(payload,header,secret){if(!secret?.startsWith('whsec_')||!header)return false;const fields=Object.fromEntries(header.split(',').map(s=>s.split('=')));const ts=Number(fields.t);if(!Number.isInteger(ts)||Math.abs(Date.now()/1000-ts)>300)return false;const mac=await signature(`${ts}.${payload}`,secret);const hex=Array.from(unb64url(mac)).map(n=>n.toString(16).padStart(2,'0')).join('');return header.split(',').some(piece=>piece.startsWith('v1=')&&safeEqual(piece.slice(3),hex))}

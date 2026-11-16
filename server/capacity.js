@@ -29,7 +29,7 @@ export async function demandScopeCapacity(db,{priceId,priceIds,now}={}){
   const ts=nowSeconds(now);
   await ensureCapacityTable(db);await cleanupExpired(db,ts);
   const prices=priceSet(priceId,priceIds);const sql=capacityPriceSql(prices.length?prices:['']);
-  const active=await db.prepare(`SELECT COUNT(*) AS n FROM subscriptions WHERE livemode=1 AND ${sql} AND status IN ('active','trialing')`)
+  const active=await db.prepare(`SELECT COUNT(DISTINCT COALESCE(member_id,stripe_customer_id)) AS n FROM subscriptions WHERE livemode=1 AND ${sql} AND status IN ('active','trialing')`)
     .bind(...(prices.length?prices:[''])).first();
   const reserved=await db.prepare("SELECT COUNT(*) AS n FROM capacity_reservations WHERE product_key='demand-scope-pro' AND expires_at>?").bind(ts).first();
   const activeCount=Number(active?.n)||0,reservedCount=Number(reserved?.n)||0;
@@ -41,8 +41,8 @@ export async function reserveDemandScopeCapacity(db,{memberId,priceId,priceIds,n
   if(!validMember(memberId))throw new Error('invalid_capacity_member');
   await ensureCapacityTable(db);await cleanupExpired(db,ts);
   const prices=priceSet(priceId,priceIds);const sql=capacityPriceSql(prices.length?prices:['']);
-  const existing=await db.prepare(`SELECT stripe_subscription_id FROM subscriptions WHERE member_id=? AND livemode=1 AND ${sql} AND status IN ('active','trialing') LIMIT 1`)
-    .bind(memberId,...(prices.length?prices:[''])).first();
+  const existing=await db.prepare("SELECT stripe_subscription_id FROM subscriptions WHERE member_id=? AND livemode=1 AND price_id=? AND status IN ('active','trialing') LIMIT 1")
+    .bind(memberId,priceId||'').first();
   if(existing?.stripe_subscription_id)return {ok:false,reason:'already_subscribed',snapshot:await demandScopeCapacity(db,{priceId,priceIds,now:ts})};
   const prior=await db.prepare("SELECT reservation_id,expires_at FROM capacity_reservations WHERE member_id=? AND product_key='demand-scope-pro' AND expires_at>? LIMIT 1")
     .bind(memberId,ts).first();
@@ -52,7 +52,7 @@ export async function reserveDemandScopeCapacity(db,{memberId,priceId,priceIds,n
   const result=await db.prepare(`INSERT OR IGNORE INTO capacity_reservations(reservation_id,member_id,product_key,status,expires_at)
     SELECT ?,?,'demand-scope-pro','pending',?
     WHERE (
-      (SELECT COUNT(*) FROM subscriptions WHERE livemode=1 AND ${placeholders} AND status IN ('active','trialing')) +
+      (SELECT COUNT(DISTINCT COALESCE(member_id,stripe_customer_id)) FROM subscriptions WHERE livemode=1 AND ${placeholders} AND status IN ('active','trialing')) +
       (SELECT COUNT(*) FROM capacity_reservations WHERE product_key='demand-scope-pro' AND expires_at>?)
     ) < ?`)
     .bind(reservationId,memberId,expiresAt,...(prices.length?prices:['']),ts,DEMANDSCOPE_PRO_CAPACITY).run();

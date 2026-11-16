@@ -4,9 +4,18 @@ import {loadWorkbook,inspectTable,selectedSeries,toCSV,downloadText} from './imp
 import {initI18n,lang,t,errorMessage} from './i18n.js';
 import {printRiskReport} from './pdf-report.js';
 const $=id=>document.getElementById(id), f=n=>formatNumber(n,1,lang());
-let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null,googleSession=null,capacityState={limit:25,remaining:null,sold_out:false};
+let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,stripeHealth=null,googleSession=null,capacityState={limit:25,remaining:null,sold_out:false},currentPlan=null,currentCapabilities=[];
 const KEY='demandscope_pro_skus_v1';
 function liveBilling(){return stripeHealth?.mode==='live'}
+function selectedPlan(){return $('planChoice')?.value||'bundle'}
+function selectedPlanPrice(plan=selectedPlan()){return plan==='bundle'?1800:980}
+function planLabel(plan=selectedPlan()){return plan==='inventory'?'Inventory':plan==='markdown'?'Markdown Decision':plan==='combined'?'Inventory + Markdown':'Bundle'}
+function applyCapabilityVisibility(){
+ const inventory=currentCapabilities.includes('inventory'),markdown=currentCapabilities.includes('markdown');
+ document.querySelectorAll('.inventory-only').forEach(el=>el.classList.toggle('hidden',!inventory));
+ const mw=$('markdownWorkspace');if(mw)mw.classList.toggle('hidden',!markdown);
+ globalThis.demandScopeCapabilities=[...currentCapabilities];
+}
 function publicPreliveLocked(){return location.origin==='https://web-stock-78r.pages.dev'&&!liveBilling()}
 function syncCheckoutDisabled(){
  const checkout=$('checkout');if(!checkout)return;
@@ -35,8 +44,9 @@ function applyBillingMode(){
  const live=liveBilling();
  const locked=publicPreliveLocked();
  const badge=$('billingModeBadge');if(badge)badge.textContent=live?'PRO PLAN · LIVE':locked?'PRO PLAN · PRE-LAUNCH':'PRO PLAN · TEST MODE';
- const label=$('billingPlanLabel');if(label)label.textContent=live?'Pro 月額プラン':locked?(lang()==='en'?'Pro launch preparation':'Pro 販売準備中'):'テスト月額プラン';
- const price=$('billingPlanPrice');if(price)price.textContent=live?(lang()==='en'?'JPY 980 / month':'980円/月'):locked?(lang()==='en'?'JPY 980 / month — enrollment not open yet':'980円/月 — 現在は新規受付前'):'100円/月（Stripeテストモード・実請求なし）';
+ const chosen=selectedPlan();
+ const label=$('billingPlanLabel');if(label)label.textContent=live?(planLabel(chosen)+' 月額プラン'):locked?(lang()==='en'?'Plan launch preparation':'プラン販売準備中'):'テスト月額プラン';
+ const price=$('billingPlanPrice');if(price)price.textContent=live?((lang()==='en'?'JPY ':'')+selectedPlanPrice(chosen).toLocaleString(lang()==='en'?'en-US':'ja-JP')+(lang()==='en'?' / month':'円/月')):locked?(lang()==='en'?'Live enrollment not open yet':'現在は新規受付前'):'100円/月（Stripeテストモード・実請求なし）';
  const renewal=$('billingPlanRenewal');if(renewal)renewal.textContent=live?(lang()==='en'?'Monthly auto-renewal. You can cancel from Stripe subscription management.':'月額自動更新。Stripe契約管理画面から解約できます。'):locked?(lang()==='en'?'Public checkout opens only after the live billing gate is green.':'本番課金ゲートがすべて通過するまで公開決済は開始しません。'):'月額自動更新の動作確認用。解約はStripe契約管理画面から行えます。';
  const checkout=$('checkout');if(checkout&&!checkout.disabled)checkout.textContent=live?(lang()==='en'?'Continue to payment':'決済へ進む'):locked?(lang()==='en'?'Enrollment not open yet':'販売準備中'):(lang()==='en'?'Open test checkout':'テスト決済へ進む');
  const footer=$('billingFooterLabel');if(footer)footer.textContent=live?'DemandScope Pro':'DemandScope Pro — テスト開発版';
@@ -106,19 +116,39 @@ async function boot(){try{await checkStripeHealth();await checkGoogleSession();a
  if(params.get('google')==='invalid'){history.replaceState({},'',location.pathname);warn(lang()==='en'?'Google sign-in could not be verified.':'Googleログインを安全に確認できませんでした。');}
  const res=await fetch('/api/entitlement',{cache:'no-store'});
  if(!res.ok){access(false,true);warn(liveBilling()?(lang()==='en'?'Pro requires Cloudflare Pages Functions and Stripe live configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripe本番設定が必要です。'):(lang()==='en'?'Pro requires deployment of Cloudflare Pages Functions and Stripe test configuration.':'Proを利用するにはCloudflare Pages FunctionsとStripeテスト設定のデプロイが必要です。'));return;}
- const state=await res.json();access(!!state.active,state.configured===false);if(state.configured===false&&state.missing?.length)warn((lang()==='en'?'Setup needed: ':'設定が必要です: ')+state.missing.join(', '));if(state.error)warn(state.error);
+ const state=await res.json();access(!!state.active,state.configured===false,state);if(state.configured===false&&state.missing?.length)warn((lang()==='en'?'Setup needed: ':'設定が必要です: ')+state.missing.join(', '));if(state.error)warn(state.error);
  }catch(e){access(false,false);warn(e.message)} }
-function access(ok,unconfigured){authorized=ok;if(!ok){skus=[];analyses.clear();selected=null;}$('proStatus').textContent=ok?(lang()==='en'?'Pro active':'Pro 利用中'):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Pro inactive':'Pro 未契約');$('proStatus').classList.toggle('pending-tag',!ok);$('preview').classList.toggle('hidden',ok);$('proWorkspace').classList.toggle('hidden',!ok);$('checkout').classList.toggle('hidden',ok);$('portal').classList.toggle('hidden',!ok);$('logout').classList.toggle('hidden',!ok);$('accessTitle').textContent=ok?(liveBilling()?(lang()==='en'?'✓ Subscription verified':'✓ Pro契約を確認しました'):(lang()==='en'?'✓ Test subscription verified':'✓ Pro テスト契約を確認しました')):(liveBilling()?(lang()==='en'?'🔒 Start Pro with Stripe':'🔒 Stripe決済で利用開始'):t('🔒 Stripe テスト決済で利用開始'));$('accessText').textContent=ok?(lang()==='en'?'Multi-product import and analysis are available.':'複数商品の編集と一括実行が使用できます。'):(liveBilling()?(lang()==='en'?'After a verified Stripe subscription, bulk import is unlocked.':'Stripe Checkoutで契約状態を確認後、機能が開放されます。'):(lang()==='en'?'After a verified Stripe test subscription, bulk import is unlocked.':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。'));$('checkout').disabled=unconfigured;if(unconfigured)$('accessText').textContent=liveBilling()?(lang()==='en'?'Configure the Stripe LIVE key, live Price ID, and session secret on Cloudflare Pages.':'Cloudflare Pagesに本番Stripeキー・本番Price ID・セッション秘密値を設定してください。'):(lang()==='en'?'Configure the Stripe TEST secret key and session secret on Cloudflare Pages.':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。');applyBillingMode();if(googleSession?.configured&&!googleSession?.authenticated){$('checkout').disabled=true;$('accessText').textContent=lang()==='en'?'Verify your identity with Google before starting Stripe Checkout.':'Stripe決済の前にGoogleで本人確認してください。';}if(ok){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}}
+function access(ok,unconfigured,entitlementState={}){
+ authorized=ok;
+ currentPlan=ok?(entitlementState.plan||'bundle'):null;
+ currentCapabilities=ok&&Array.isArray(entitlementState.capabilities)?entitlementState.capabilities:[];
+ if(!ok){skus=[];analyses.clear();selected=null;}
+ $('proStatus').textContent=ok?((lang()==='en'?planLabel(currentPlan)+' active':planLabel(currentPlan)+' 利用中')):unconfigured?(lang()==='en'?'Stripe not configured':'Stripe 未設定'):(lang()==='en'?'Subscription inactive':'未契約');
+ $('proStatus').classList.toggle('pending-tag',!ok);
+ $('preview').classList.toggle('hidden',ok);
+ $('proWorkspace').classList.toggle('hidden',!ok);
+ $('checkout').classList.toggle('hidden',ok);
+ $('portal').classList.toggle('hidden',!ok);
+ $('logout').classList.toggle('hidden',!ok);
+ $('accessTitle').textContent=ok?(liveBilling()?(lang()==='en'?'✓ Subscription verified':'✓ 契約を確認しました'):(lang()==='en'?'✓ Test subscription verified':'✓ テスト契約を確認しました')):(liveBilling()?(lang()==='en'?'🔒 Start with Stripe':'🔒 Stripe決済で利用開始'):t('🔒 Stripe テスト決済で利用開始'));
+ $('accessText').textContent=ok?(currentCapabilities.includes('inventory')&&currentCapabilities.includes('markdown')?'在庫Monte Carloと値下げ判断の両方を利用できます。':currentCapabilities.includes('markdown')?'値下げ判断を利用できます。':'在庫Monte Carlo分析を利用できます。'):(liveBilling()?'料金プランを選択してStripe Checkoutへ進んでください。':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。');
+ $('checkout').disabled=unconfigured;
+ if(unconfigured)$('accessText').textContent=liveBilling()?'Cloudflare PagesのStripe本番設定を確認してください。':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。';
+ applyBillingMode();applyCapabilityVisibility();
+ if(googleSession?.configured&&!googleSession?.authenticated){$('checkout').disabled=true;$('accessText').textContent=lang()==='en'?'Verify your identity with Google before starting Stripe Checkout.':'Stripe決済の前にGoogleで本人確認してください。';}
+ if(ok&&currentCapabilities.includes('inventory')){try{const local=JSON.parse(localStorage.getItem(KEY)||'[]');skus=Array.isArray(local)?local.filter(x=>x&&typeof x.id==='string'&&typeof x.name==='string'&&typeof x.data==='string').filter(x=>x.data.length<=200000&&x.name.length<=90).slice(0,200):[]}catch{skus=[]}renderTable()}
+}
 $('checkout').addEventListener('click',async()=>{
  clearWarn();$('checkoutError').classList.add('hidden');const button=$('checkout');const original=button.textContent;button.disabled=true;button.textContent=lang()==='en'?'Connecting to Stripe…':'Stripeに接続中…';
  try{
   const buyerEmail=$('buyerEmail')?.value.trim()||'';if(!$('buyerEmail')?.checkValidity()||!buyerEmail)throw new Error(lang()==='en'?'Enter the buyer email that Stripe should use for billing and subscription management.':'Stripeの決済・契約管理に使用する購入者メールアドレスを入力してください。');
   if(!$('legalConsent')?.checked)throw new Error(lang()==='en'?'Please accept the terms, privacy policy, and billing conditions before Checkout.':'決済前に利用規約・プライバシーポリシー・課金条件への同意が必要です。');
-  const x=await call('/api/checkout',{accept_terms:true,buyer_email:buyerEmail});
+  const x=await call('/api/checkout',{accept_terms:true,buyer_email:buyerEmail,plan:selectedPlan()});
   if(!x.url)throw new Error(lang()==='en'?'Checkout URL was not returned.':'決済URLが返されませんでした。');location.assign(x.url)
  }
  catch(e){const message=e.message||String(e);warn(message);$('checkoutError').textContent=message;$('checkoutError').classList.remove('hidden');await checkStripeHealth();await checkCapacity();syncCheckoutDisabled();button.textContent=original}
 });
+$('planChoice')?.addEventListener('change',()=>applyBillingMode());
 $('portal').addEventListener('click',async()=>{try{const x=await call('/api/portal');location.assign(x.url)}catch(e){warn(e.message)}});
 $('sendMagicLink')?.addEventListener('click',async()=>{const email=$('recoveryEmail')?.value.trim()||'';const button=$('sendMagicLink'),message=$('magicLinkMessage');if(!$('recoveryEmail')?.checkValidity()||!email){message.textContent=lang()==='en'?'Enter the email used for purchase.':'購入時のメールアドレスを入力してください。';return}const original=button.textContent;button.disabled=true;button.textContent=lang()==='en'?'Sending…':'送信中…';try{const x=await call('/api/magic-link/request',{email});message.textContent=x.message|| (lang()==='en'?'If an active subscription exists, a login link will be sent.':'有効な契約が確認できる場合、本人確認リンクを送信します。')}catch(e){message.textContent=e.message||String(e)}finally{button.disabled=false;button.textContent=original}});
 $('logout').addEventListener('click',async()=>{try{await call('/api/logout');access(false,false);toast('この端末のProセッションからサインアウトしました')}catch(e){warn(e.message)}});

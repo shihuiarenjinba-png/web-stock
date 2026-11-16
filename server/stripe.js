@@ -92,7 +92,7 @@ export function configurationDiagnostics(env){
 }
 export function configurationMissing(env){return [...new Set(configurationDiagnostics(env).map(x=>x.name))]}
 export function isConfigured(env){return configurationMissing(env).length===0}
-export function validateLivePriceObject(price,{expectedAmount=null,expectedCapability=null}={}){
+export function validateLivePriceObject(price,{expectedAmount=LIVE_INVENTORY_MONTHLY_JPY,expectedCapability=null}={}){
  const product=price?.product;
  if(price?.livemode!==true)return {ok:false,reason:'not_live'};
  if(price?.active!==true)return {ok:false,reason:'inactive'};

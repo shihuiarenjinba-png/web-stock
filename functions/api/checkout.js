@@ -1,14 +1,17 @@
-import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError,billingMode,activePriceId,verifyLivePrice,isPublicProductionRequest} from '../../server/stripe.js';
+import {json,isConfigured,validOrigin,origin,stripe,checkoutBrowserState,TEST_MONTHLY_JPY,StripeApiError,billingMode,activePriceId,verifyLivePrice,isPublicProductionRequest,planDefinition,activeLivePriceIds} from '../../server/stripe.js';
 import {LEGAL_VERSION} from '../../server/legal.js';
 import {authenticatedMember,googleConfiguration} from '../../server/google-auth.js';
 import {reserveDemandScopeCapacity,releaseDemandScopeReservation} from '../../server/capacity.js';
 function validBuyerEmail(value){return typeof value==='string'&&value.length<=254&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)}
 export async function onRequestPost({request,env}){
- const mode=billingMode(env),priceId=activePriceId(env);
+ const mode=billingMode(env);
  if(mode!=='live'&&isPublicProductionRequest(request))return json({error:'DemandScope Pro は販売開始直前のため、新規決済を一時停止しています。',code:'production_prelive_locked'},503);
  if(!isConfigured(env))return json({error:mode==='live'?'Stripe本番接続が未設定です。管理者の設定後に利用できます。':'Stripeテスト接続が未設定です。管理者の設定後に利用できます。'},503);
  if(!validOrigin(request,env))return json({error:'アクセス元を確認できません。'},403);
  let input={};try{input=await request.json()}catch{}
+ const plan=mode==='live'?String(input?.plan||'bundle').toLowerCase():'bundle';
+ const planDef=planDefinition(plan);if(!planDef)return json({error:'料金プランが不正です。'},400);
+ const priceId=activePriceId(env,plan);
  const googleCfg=googleConfiguration(env);const member=await authenticatedMember(request,env);
  if(mode==='live'&&!googleCfg.configured)return json({error:'Google本人認証の本番設定が未完了です。販売開始を停止しています。',auth_not_configured:true,issues:googleCfg.issues},503);
  if((mode==='live'||googleCfg.configured)&&!member)return json({error:'Googleでログインしてから決済へ進んでください。',auth_required:true},401);
@@ -18,10 +21,10 @@ export async function onRequestPost({request,env}){
  let reservation=null;
  try{
   if(mode==='live'){
-   const verified=await verifyLivePrice(env);
-   if(!verified.ok)return json({error:'本番価格設定を安全に確認できません。',detail:'DemandScope Pro は月額980円のLive Priceとして確認できるまで決済を開始しません。',price_check:verified.reason},503);
+   const verified=await verifyLivePrice(env,plan);
+   if(!verified.ok)return json({error:'本番価格設定を安全に確認できません。',detail:`DemandScope ${planDef.key} のLive Priceを確認できるまで決済を開始しません。`,price_check:verified.reason},503);
    if(!env.DB?.prepare)return json({error:'販売枠の確認用データベースに接続できません。新規購入を安全のため停止しています。'},503);
-   try{reservation=await reserveDemandScopeCapacity(env.DB,{memberId:member.id,priceId});}
+   try{reservation=await reserveDemandScopeCapacity(env.DB,{memberId:member.id,priceId,priceIds:activeLivePriceIds(env)});}
    catch{return json({error:'販売枠を確認できません。新規購入を安全のため停止しています。'},503)}
    if(!reservation.ok){
     return json({
@@ -33,10 +36,10 @@ export async function onRequestPost({request,env}){
   const site=origin(env,request);const state=await checkoutBrowserState(env,site.startsWith('https:'));const session=await stripe(env,'/checkout/sessions',{
  mode:'subscription',client_reference_id:state.reference, 'line_items[0][quantity]':'1',
  success_url:`${site}/pro/?session_id={CHECKOUT_SESSION_ID}`,cancel_url:`${site}/pro/?checkout=cancelled`,
- 'metadata[app]':'demand-scope-pro', 'metadata[legal_version]':LEGAL_VERSION, 'metadata[legal_accepted_at]':String(Math.floor(Date.now()/1000)),
+ 'metadata[app]':'demand-scope-pro', 'metadata[plan]':plan, 'metadata[legal_version]':LEGAL_VERSION, 'metadata[legal_accepted_at]':String(Math.floor(Date.now()/1000)),
  ...(member?{'metadata[member_id]':member.id}:{}),
  ...(reservation?.reservationId?{'metadata[capacity_reservation_id]':reservation.reservationId}:{}),
- 'subscription_data[metadata][app]':'demand-scope-pro', 'subscription_data[metadata][legal_version]':LEGAL_VERSION,
+ 'subscription_data[metadata][app]':'demand-scope-pro', 'subscription_data[metadata][plan]':plan, 'subscription_data[metadata][legal_version]':LEGAL_VERSION,
  ...(member?{'subscription_data[metadata][member_id]':member.id}:{}),
  ...(reservation?.reservationId?{'subscription_data[metadata][capacity_reservation_id]':reservation.reservationId}:{}),
  customer_email:buyerEmail,

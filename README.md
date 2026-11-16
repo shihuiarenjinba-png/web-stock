@@ -14,22 +14,33 @@ Pro権限は、(1) Checkout開始ブラウザのHttpOnly署名CookieとStripe Su
 
 Stripe Customer Portalのメールログインは契約管理用です。別端末ではGoogle本人認証後、内部memberとStripe Customerの紐付けが確認できた場合にPro権限を再検証します。
 
-現在のLive Productは `DemandScope Pro`、Live Priceは `price_1Ua2NWBGa8rL8jwIKk7Tbtas`（JPY 980 / month）です。NamiDataの商品・Priceは流用しません。
+現在のLive Productは `DemandScope Pro` で、3つの月額Priceを使用します：Inventory 980円、Markdown Decision 980円、Bundle 1,800円。NamiDataの商品・Priceは流用しません。
 
 ## 現在の商用公開準備（2026-11-09）
 
-- Pro本番価格: **月額980円**
+- 本番価格: **Inventory 980円/月 / Markdown Decision 980円/月 / Bundle 1,800円/月**
 - Live課金は明示ゲート `LIVE_BILLING_ENABLED=true` のときだけ有効
 - TEST/LIVEのStripe key・Price・Portal・Webhookを分離
-- Live PriceはCheckout直前に **Live / active / JPY 980 / monthly / DemandScope Pro metadata** を再照合し、不一致なら決済をfail closed
+- 各Live PriceはCheckout直前に **Live / active / JPY / monthly / plan capability metadata** を再照合し、不一致なら決済をfail closed
 - D1 Webhook同期・backlog監視・livemode分離済み
 - Pro PDFは全体サマリー＋SKU別詳細＋分布図＋実際の分析警告を出力
 - 本番公開の残件は [商用公開チェックリスト](docs/COMMERCIAL_LAUNCH_CHECKLIST_ja.md) を参照
 
-> 現在は安全のためLive課金スイッチをOFFにしています。Google本人認証、Stripe Customer/Subscription紐付け、Live Product/Price、法務/返金条件、Live secrets、最終Live E2Eが完了するまで一般向け実課金は開始しません。
+> Live課金ゲートは現在有効です。Google本人認証、Stripe Customer/Subscription紐付け、D1、Webhook、Live Price照合を継続してfail closedで検証します。
 
 
-## Pro 値下げ判断（開発中）\n\nProワークスペースに、過去の価格・販売数・販売可能在庫から価格反応を推定し、値下げ率ごとの期待販売数・期待残数・売切確率・期待粗利益を比較するローカル計算機能を追加中です。欠品で販売数が打ち切られた期は推定から除外し、履歴が28期未満、価格水準が不足、価格別観測が少ない場合は推奨をHOLDします。これは観測履歴に基づく意思決定支援であり、値下げの因果効果や将来利益を保証しません。\n\n## できること
+## 値下げ判断 / Markdown Decision\n\n過去の価格・販売数・販売可能在庫から価格反応を推定し、値下げ率ごとの期待販売数・期待残数・売切確率・期待粗利益を比較します。Markdown Decision単体またはBundleで利用できます。欠品で販売数が打ち切られた期は推定から除外し、履歴が28期未満、価格水準が不足、価格別観測が少ない場合は推奨をHOLDします。これは観測履歴に基づく意思決定支援であり、値下げの因果効果や将来利益を保証しません。\n\n
+## Live料金プラン（2026-11-16）
+
+| プラン | 月額 | 機能 |
+|---|---:|---|
+| Inventory | 980円 | 複数SKUのMonte Carlo在庫・需要リスク分析 |
+| Markdown Decision | 980円 | 過去の価格・販売履歴を使った値下げシナリオ比較 |
+| Bundle | 1,800円 | Inventory + Markdown Decision。個別2契約合計1,960円より160円/月割引 |
+
+Stripe SubscriptionのPrice IDをサーバー側で再照合し、契約Priceから利用可能capabilityを決定します。Googleログインやメール文字列だけでは機能を開放しません。
+
+## できること
 
 | | 無料 / Free | Pro（別ページ `/pro/`） |
 |---|---|---|

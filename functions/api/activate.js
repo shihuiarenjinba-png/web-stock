@@ -18,6 +18,6 @@ export async function onRequestPost({request,env}){
    if(!member||member.id!==linkedMember)return json({error:'決済を開始したGoogleアカウントでログインしてください。'},403);
    await linkMemberStripeCustomer(env,member.id,sess.customer);
  }
- const secure=origin(env,request).startsWith('https:');return json({active:true,status:sub.status},200,{'Set-Cookie':await issueCookie(sess.subscription,sess.customer,env,secure)});
+ const secure=origin(env,request).startsWith('https:');return json({active:true,status:sub.status,plan:sub.demandScopePlan,capabilities:sub.demandScopeCapabilities},200,{'Set-Cookie':await issueCookie(sess.subscription,sess.customer,env,secure)});
  }catch{return json({error:mode==='live'?'本番決済の検証に失敗しました。':'テスト決済の検証に失敗しました。'},502)}
 }

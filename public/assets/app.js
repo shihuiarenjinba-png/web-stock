@@ -43,7 +43,16 @@ function renderSeries(){
    stockCell.append(stockCaption,stock);wrap.append(input,name,size,stockCell);root.append(wrap);
  });
  refreshLimits();
- if(!all.length){root.textContent=lang()==='en'?'No complete numeric demand series found. Choose another sheet or direction.':'数値の需要系列が検出されませんでした。シートまたは方向を変更してください。';}
+ const rejected=inspection?.rejected?.[axis]||[];
+ if(rejected.length){
+   const note=document.createElement('p');note.className='help';
+   const names=rejected.slice(0,6).map(x=>x.name).join(', ');
+   note.textContent=lang()==='en'
+     ?`Excluded incomplete/invalid series: ${names}${rejected.length>6?' …':''}. Fix internal gaps or invalid values before analysis.`
+     :`途中欠損・不正値のため除外: ${names}${rejected.length>6?' …':''}。欠損や不正値を修正してから分析してください。`;
+   root.append(note);
+ }
+ if(!all.length&&!rejected.length){root.textContent=lang()==='en'?'No complete numeric demand series found. Choose another sheet or direction.':'数値の需要系列が検出されませんでした。シートまたは方向を変更してください。';}
 }
 function refreshLimits(){const root=$('freeSeries'),checked=root.querySelectorAll('input:checked').length;root.querySelectorAll('input[type=checkbox]').forEach(c=>{c.disabled=checked>=2&&!c.checked;c.closest('label').classList.toggle('limit-disabled',c.disabled);})}
 $('freeFile').addEventListener('change',async e=>{

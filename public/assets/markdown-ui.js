@@ -47,7 +47,8 @@ function showCoreHistory(){
  const rows=markdownCoreHistory.rows;
  const hasRevenue=rows.some(r=>Number.isFinite(r.revenueReported));
  const hasCost=rows.some(r=>Number.isFinite(r.totalCost)||Number.isFinite(r.unitCostHistorical));
- el.textContent=`${markdownCoreHistory.file} / ${markdownCoreHistory.sheet} / ${rows.length}期 / 売上:${hasRevenue?'あり':'なし'} / 費用:${hasCost?'あり':'なし'}`;
+ const orientation=markdownCoreHistory.orientation==='transposed'?'転置→自動変換':'通常形式';
+ el.textContent=`${markdownCoreHistory.file} / ${markdownCoreHistory.sheet} / ${rows.length}期 / ${orientation} / 売上:${hasRevenue?'あり':'なし'} / 費用:${hasCost?'あり':'なし'}`;
 }
 
 $('markdownCoreFile')?.addEventListener('change',async e=>{
@@ -79,7 +80,7 @@ function showCovariateFiles(){
    el.textContent=`追加説明変数なし（最大${MAX_MARKDOWN_COVARIATES}ファイル）`;
    return;
  }
- el.textContent=`${markdownCovariates.length}/${MAX_MARKDOWN_COVARIATES}変数: ${markdownCovariates.map(x=>`${x.name}（${x.count}期）`).join(' / ')}`;
+ el.textContent=`${markdownCovariates.length}/${MAX_MARKDOWN_COVARIATES}変数: ${markdownCovariates.map(x=>`${x.name}（${x.count}期・${x.orientation==='transposed'?'転置→自動変換':'通常'}）`).join(' / ')}`;
 }
 
 $('markdownCovariateFiles')?.addEventListener('change',async e=>{

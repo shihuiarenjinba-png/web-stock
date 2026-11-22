@@ -1,0 +1,30 @@
+{
+  "source_name": "景気動向指数 採用系列",
+  "publisher": "内閣府",
+  "statistics_code": "00100406",
+  "stats_data_id": "0003446462",
+  "source_page": "https://www.e-stat.go.jp/dbview?sid=0003446462",
+  "terms_url": "https://www.e-stat.go.jp/terms-of-use",
+  "history_months": 120,
+  "date_convention": "month_start_for_demandscope",
+  "variables": [
+    {
+      "id": "core_cpi_yoy_pct",
+      "approved": true,
+      "source_label_contains": "(遅行)_Lg8消費者物価指数(生鮮食品を除く総合)(前年同月比)",
+      "transform": "identity",
+      "unit": "% YoY",
+      "filename": "japan-core-cpi-yoy.csv",
+      "research_reference": "Humpe & Macmillan (2009), DOI 10.1080/09603100701748956; Japan macro-volatility literature"
+    },
+    {
+      "id": "industrial_production_yoy_pct",
+      "approved": true,
+      "source_label_contains": "(一致)_C1生産指数(鉱工業)",
+      "transform": "pct_change_12",
+      "unit": "% YoY",
+      "filename": "japan-industrial-production-yoy.csv",
+      "research_reference": "Humpe & Macmillan (2009), DOI 10.1080/09603100701748956"
+    }
+  ]
+}

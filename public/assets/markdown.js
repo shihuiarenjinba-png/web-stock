@@ -18,7 +18,12 @@ const CORE_REVENUE_HEADER=/^(revenue|sales_revenue|net_sales|売上|売上高|�
 const CORE_UNIT_COST_HEADER=/^(unit_cost|cost_per_unit|仕入単価|単位原価|原価単価)$/i;
 const CORE_TOTAL_COST_HEADER=/^(total_cost|cost|costs|費用|総費用|売上原価)$/i;
 
-function headerHas(row,re){return (row||[]).some(v=>re.test(String(v??'').trim()))}
+function normalizedHeader(v){
+  return String(v??'').trim()
+    .replace(/\s*[\(（]\s*(?:円|jpy|yen|個|pcs?|units?|件|本|台|kg|g|万円)\s*[\)）]\s*$/i,'')
+    .trim();
+}
+function headerHas(row,re){return (row||[]).some(v=>re.test(normalizedHeader(v)))}
 function coreOrientation(raw){
   const rows=raw.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
   if(!rows.length)return {rows,orientation:'row'};
@@ -32,7 +37,7 @@ function coreOrientation(raw){
 }
 
 function uniqueHeaderIndex(header,re,label){
-  const hits=header.map((v,i)=>re.test(String(v??'').trim())?i:-1).filter(i=>i>=0);
+  const hits=header.map((v,i)=>re.test(normalizedHeader(v))?i:-1).filter(i=>i>=0);
   if(hits.length!==1)throw new Error(`基準履歴ファイルには ${label} 列を1つだけ含めてください。`);
   return hits[0];
 }
@@ -42,7 +47,7 @@ export function parseMarkdownHistoryTable(rows){
   const oriented=coreOrientation(rows);
   const nonEmpty=oriented.rows.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
   if(nonEmpty.length<2)throw new Error('基準履歴ファイルに有効なデータがありません。');
-  const header=nonEmpty[0].map(v=>String(v??'').trim());
+  const header=nonEmpty[0].map(v=>normalizedHeader(v));
   const di=uniqueHeaderIndex(header,CORE_DATE_HEADER,'date/日付');
   const pi=uniqueHeaderIndex(header,CORE_PRICE_HEADER,'price/価格');
   const ui=uniqueHeaderIndex(header,CORE_UNITS_HEADER,'units/販売数');

@@ -200,7 +200,16 @@ function renderImportSeries(){
    const count=document.createElement('span');count.className='series-count';count.textContent=`${s.length} ${lang()==='en'?'days':'期'}`;
    label.append(check,name,count);root.append(label);
  }
- if(!series.length)root.textContent=lang()==='en'?'No demand series detected. Try another orientation or sheet.':'需要系列が見つかりません。方向またはシートを変えてください。';
+ const rejected=importInspection?.rejected?.[axis]||[];
+ if(rejected.length){
+   const note=document.createElement('p');note.className='help';
+   const names=rejected.slice(0,8).map(x=>x.name).join(', ');
+   note.textContent=lang()==='en'
+     ?`Excluded incomplete/invalid series: ${names}${rejected.length>8?' …':''}. Internal gaps and invalid numeric cells are not imputed.`
+     :`途中欠損・不正値のため除外: ${names}${rejected.length>8?' …':''}。途中欠損や不正数値は自動補完しません。`;
+   root.append(note);
+ }
+ if(!series.length&&!rejected.length)root.textContent=lang()==='en'?'No demand series detected. Try another orientation or sheet.':'需要系列が見つかりません。方向またはシートを変えてください。';
 }
 function renderImportedSheet(){
  const next=inspectTable(importBook.sheets[Number($('proSheet').value)].rows);

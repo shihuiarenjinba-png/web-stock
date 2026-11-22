@@ -153,15 +153,22 @@ export function estimatePriceResponse(rows,{covariateNames=[]}={}){
   const prices=[...new Set(usable.map(r=>r.price))].sort((a,b)=>a-b);
   const counts=new Map(prices.map(p=>[p,usable.filter(r=>r.price===p).length]));
   const warnings=[];
+  const unitsValues=usable.map(r=>r.units);
+  const unitsMean=unitsValues.length?mean(unitsValues):0;
+  const unitsSd=sd(unitsValues);
+  const unitOutliers=unitsSd>0?usable.map(r=>({date:r.date,units:r.units,z:(r.units-unitsMean)/unitsSd})).filter(x=>Math.abs(x.z)>=3.5):[];
+  const extremeUnitOutliers=unitOutliers.filter(x=>Math.abs(x.z)>=5);
+  if(unitOutliers.length)warnings.push(`販売数に |z| >= 3.5 の外れ値候補が${unitOutliers.length}期あります。`);
+  if(extremeUnitOutliers.length)warnings.push(`販売数に平均から5標準偏差以上離れた極端値が${extremeUnitOutliers.length}期あるため、価格推奨をHOLDします。`);
   if(rows.some(r=>r.stockout))warnings.push('欠品または販売可能数で打ち切られた期は価格反応推定から除外しました。');
   if(usable.length<28)warnings.push('有効履歴が28期未満です。価格反応の推定は不安定です。');
   if(prices.length<2)warnings.push('価格水準が1つしかないため、値下げ効果を識別できません。');
   if(prices.length>=2&&Math.min(...counts.values())<5)warnings.push('一部価格水準の観測が5期未満です。');
   const covCount=Math.min(covariateNames.length,usable[0]?.covariates?.length||0);
-  if(usable.length<3||prices.length<2)return {status:'HOLD',usable,prices,counts,warnings,slope:null,r2:null,residualSd:null,covariateCoefficients:{}};
+  if(usable.length<3||prices.length<2)return {status:'HOLD',usable,prices,counts,warnings,unitOutliers,extremeUnitOutliers,slope:null,r2:null,residualSd:null,covariateCoefficients:{}};
 
   const covStats=standardizeColumns(usable,covCount);
-  if(covCount&&!covStats)return {status:'HOLD',usable,prices,counts,warnings:[...warnings,'欠品除外後に定数化した追加変数があり、回帰できません。'],slope:null,r2:null,residualSd:null,covariateCoefficients:{}};
+  if(covCount&&!covStats)return {status:'HOLD',usable,prices,counts,warnings:[...warnings,'欠品除外後に定数化した追加変数があり、回帰できません。'],unitOutliers,extremeUnitOutliers,slope:null,r2:null,residualSd:null,covariateCoefficients:{}};
 
   const basePrice=Math.exp(mean(usable.map(r=>Math.log(r.price))));
   const n=Math.max(1,usable.length-1);
@@ -175,7 +182,7 @@ export function estimatePriceResponse(rows,{covariateNames=[]}={}){
   const xtx=Array.from({length:p},()=>Array(p).fill(0)),xty=Array(p).fill(0);
   for(let i=0;i<x.length;i++)for(let a=0;a<p;a++){xty[a]+=x[i][a]*y[i];for(let c=0;c<p;c++)xtx[a][c]+=x[i][a]*x[i][c]}
   const beta=solveLinear(xtx,xty);
-  if(!beta)return {status:'HOLD',usable,prices,counts,warnings:[...warnings,'回帰行列が特異で推定できません。変数間の強い相関を確認してください。'],slope:null,r2:null,residualSd:null,covariateCoefficients:{}};
+  if(!beta)return {status:'HOLD',usable,prices,counts,warnings:[...warnings,'回帰行列が特異で推定できません。変数間の強い相関を確認してください。'],unitOutliers,extremeUnitOutliers,slope:null,r2:null,residualSd:null,covariateCoefficients:{}};
   const fitted=x.map(v=>v.reduce((s,z,j)=>s+z*beta[j],0));
   const residuals=y.map((v,i)=>v-fitted[i]);
   const ybar=mean(y),sst=y.reduce((s,v)=>s+(v-ybar)**2,0),sse=residuals.reduce((s,v)=>s+v*v,0);
@@ -184,8 +191,8 @@ export function estimatePriceResponse(rows,{covariateNames=[]}={}){
   if(r2!==null&&r2<0.05)warnings.push('価格・時間トレンド・追加変数でも販売変動をほとんど説明できません。');
   const covariateCoefficients={};
   for(let j=0;j<covCount;j++)covariateCoefficients[covariateNames[j]||`variable_${j+1}`]=beta[3+j];
-  const enough=usable.length>=28&&prices.length>=2&&Math.min(...counts.values())>=5&&beta[1]<0&&r2!==null&&r2>=0.05;
-  return {status:enough?'READY':'HOLD',usable,prices,counts,warnings,slope:beta[1],timeSlope:beta[2],intercept:beta[0],basePrice,r2,residualSd,covariateCoefficients,covariateStats:covStats};
+  const enough=usable.length>=28&&prices.length>=2&&Math.min(...counts.values())>=5&&beta[1]<0&&r2!==null&&r2>=0.05&&extremeUnitOutliers.length===0;
+  return {status:enough?'READY':'HOLD',usable,prices,counts,warnings,unitOutliers,extremeUnitOutliers,slope:beta[1],timeSlope:beta[2],intercept:beta[0],basePrice,r2,residualSd,covariateCoefficients,covariateStats:covStats};
 }
 
 export function analyzeMarkdownHistory({history,covariates=[],maxYears=null,maxPeriods=4000,financialDiagnostics=false,currentPrice,unitCost,currentInventory,horizonPeriods=30,discounts=[0,.05,.1,.15,.2],leftoverPenalty=0,runs=3000}){

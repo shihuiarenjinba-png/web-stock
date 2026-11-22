@@ -36,6 +36,7 @@ function render(result){
  rec.textContent=result.recommendation
    ?`履歴モデル上の期待粗利益最大: ${pct(result.recommendation.discount)} 値下げ（期待粗利益 ${yen(result.recommendation.expectedGrossProfit)}）。因果効果の保証ではありません。`
    :'十分な価格履歴、または安定した変数構成がないため、値下げ率の推奨は行いません。';
+ renderFinancial(result.financial);
  out.classList.remove('hidden');
 }
 
@@ -43,7 +44,10 @@ function showCoreHistory(){
  const el=$('markdownCoreStatus');
  if(!el)return;
  if(!markdownCoreHistory){el.textContent='基準履歴ファイルが選択されていません';return;}
- el.textContent=`${markdownCoreHistory.file} / ${markdownCoreHistory.sheet} / ${markdownCoreHistory.rows.length}期`;
+ const rows=markdownCoreHistory.rows;
+ const hasRevenue=rows.some(r=>Number.isFinite(r.revenueReported));
+ const hasCost=rows.some(r=>Number.isFinite(r.totalCost)||Number.isFinite(r.unitCostHistorical));
+ el.textContent=`${markdownCoreHistory.file} / ${markdownCoreHistory.sheet} / ${rows.length}期 / 売上:${hasRevenue?'あり':'なし'} / 費用:${hasCost?'あり':'なし'}`;
 }
 
 $('markdownCoreFile')?.addEventListener('change',async e=>{
@@ -122,6 +126,7 @@ $('markdownForm')?.addEventListener('submit',e=>{
     covariates:markdownCovariates,
     maxYears:policy.maxYears,
     maxPeriods:policy.maxPeriods,
+    financialDiagnostics:globalThis.demandScopeCapabilities.includes('markdown10'),
     currentPrice:Number($('markdownCurrentPrice').value),
     unitCost:Number($('markdownUnitCost').value),
     currentInventory:Number($('markdownInventory').value),

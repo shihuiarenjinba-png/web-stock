@@ -1,5 +1,6 @@
 import {alignMarkdownCovariates,normalizeDateKey} from './markdown-covariates.js';
 import {numberOrNull} from './importer.js';
+import {analyzeFinancialHistory} from './markdown-financial.js';
 
 function mean(a){return a.reduce((s,v)=>s+v,0)/a.length}
 function sd(a){if(a.length<2)return 0;const m=mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1))}
@@ -13,6 +14,9 @@ const CORE_PRICE_HEADER=/^(price|unit_price|selling_price|価格|単価|販売�
 const CORE_UNITS_HEADER=/^(units|sales|qty|quantity|units_sold|販売|販売数|数量|個数|販売個数)$/i;
 const CORE_AVAILABLE_HEADER=/^(available|stock|inventory|在庫|販売可能|販売可能数)$/i;
 const CORE_STOCKOUT_HEADER=/^(stockout|out_of_stock|欠品|品切れ)$/i;
+const CORE_REVENUE_HEADER=/^(revenue|sales_revenue|net_sales|売上|売上高|売上金額)$/i;
+const CORE_UNIT_COST_HEADER=/^(unit_cost|cost_per_unit|仕入単価|単位原価|原価単価)$/i;
+const CORE_TOTAL_COST_HEADER=/^(total_cost|cost|costs|費用|総費用|売上原価)$/i;
 
 function uniqueHeaderIndex(header,re,label){
   const hits=header.map((v,i)=>re.test(String(v??'').trim())?i:-1).filter(i=>i>=0);
@@ -30,6 +34,10 @@ export function parseMarkdownHistoryTable(rows){
   const ui=uniqueHeaderIndex(header,CORE_UNITS_HEADER,'units/販売数');
   const ai=header.findIndex(v=>CORE_AVAILABLE_HEADER.test(v));
   const si=header.findIndex(v=>CORE_STOCKOUT_HEADER.test(v));
+  const ri=header.findIndex(v=>CORE_REVENUE_HEADER.test(v));
+  const uci=header.findIndex(v=>CORE_UNIT_COST_HEADER.test(v));
+  const tci=header.findIndex(v=>CORE_TOTAL_COST_HEADER.test(v));
+  if(uci>=0&&tci>=0)throw new Error('基準履歴ファイルには unit_cost/単位原価 と total_cost/総費用 の両方を同時に含めないでください。');
   const rowsOut=[],dates=new Set();
   for(let r=1;r<nonEmpty.length;r++){
     const row=nonEmpty[r];
@@ -40,6 +48,19 @@ export function parseMarkdownHistoryTable(rows){
     if(dates.has(date))throw new Error(`基準履歴ファイルに重複日付 ${date} があります。`);
     if(!Number.isFinite(price)||price<=0)throw new Error(`${r+1}行目の価格が正の数値ではありません。`);
     if(!Number.isFinite(units)||units<0)throw new Error(`${r+1}行目の販売数が0以上の数値ではありません。`);
+    let revenueReported=null,unitCostHistorical=null,totalCost=null;
+    if(ri>=0){
+      revenueReported=numberOrNull(row?.[ri]);
+      if(!Number.isFinite(revenueReported)||revenueReported<0)throw new Error(`${r+1}行目の売上が0以上の数値ではありません。`);
+    }
+    if(uci>=0){
+      unitCostHistorical=numberOrNull(row?.[uci]);
+      if(!Number.isFinite(unitCostHistorical)||unitCostHistorical<0)throw new Error(`${r+1}行目の単位原価が0以上の数値ではありません。`);
+    }
+    if(tci>=0){
+      totalCost=numberOrNull(row?.[tci]);
+      if(!Number.isFinite(totalCost)||totalCost<0)throw new Error(`${r+1}行目の総費用が0以上の数値ではありません。`);
+    }
     let available=null;
     if(ai>=0&&row?.[ai]!==''&&row?.[ai]!==null&&row?.[ai]!==undefined){
       available=numberOrNull(row[ai]);
@@ -48,7 +69,7 @@ export function parseMarkdownHistoryTable(rows){
     const rawStockout=si>=0?row?.[si]:null;
     const stockout=si>=0?/^(1|true|yes|y|欠品|品切れ)$/i.test(String(rawStockout??'').trim()):(available!==null&&available<=units);
     dates.add(date);
-    rowsOut.push({date,price,units,available,stockout,index:rowsOut.length,covariates:[]});
+    rowsOut.push({date,price,units,revenueReported,unitCostHistorical,totalCost,available,stockout,index:rowsOut.length,covariates:[]});
   }
   if(rowsOut.length<2)throw new Error('基準履歴ファイルの有効履歴が少なすぎます。');
   rowsOut.sort((a,b)=>a.date.localeCompare(b.date));
@@ -167,10 +188,11 @@ export function estimatePriceResponse(rows,{covariateNames=[]}={}){
   return {status:enough?'READY':'HOLD',usable,prices,counts,warnings,slope:beta[1],timeSlope:beta[2],intercept:beta[0],basePrice,r2,residualSd,covariateCoefficients,covariateStats:covStats};
 }
 
-export function analyzeMarkdownHistory({history,covariates=[],maxYears=null,maxPeriods=4000,currentPrice,unitCost,currentInventory,horizonPeriods=30,discounts=[0,.05,.1,.15,.2],leftoverPenalty=0,runs=3000}){
+export function analyzeMarkdownHistory({history,covariates=[],maxYears=null,maxPeriods=4000,financialDiagnostics=false,currentPrice,unitCost,currentInventory,horizonPeriods=30,discounts=[0,.05,.1,.15,.2],leftoverPenalty=0,runs=3000}){
   const rawRows=typeof history==='string'?parseMarkdownHistory(history):history;
   const aligned=alignMarkdownCovariates(rawRows,covariates,{maxYears,maxPeriods});
   const fit=estimatePriceResponse(aligned.rows,{covariateNames:aligned.covariateNames});
+  const financial=analyzeFinancialHistory(aligned.rows,{enabled:financialDiagnostics});
   fit.warnings=[...aligned.warnings,...fit.warnings];
   fit.covariateNames=aligned.covariateNames;
   fit.correlationDiagnostics=aligned.diagnostics;
@@ -189,7 +211,7 @@ export function analyzeMarkdownHistory({history,covariates=[],maxYears=null,maxP
   const currentObserved=recent.filter(r=>Math.abs(r.price-currentPrice)/currentPrice<0.03);
   const baselinePool=currentObserved.length>=3?currentObserved:recent;
   const baselineUnits=baselinePool.length?mean(baselinePool.map(r=>r.units)):0;
-  if(!Number.isFinite(fit.slope))return {...fit,baselineUnits,scenarios:[],recommendation:null,periodsUsed:aligned.rows.length,maxYears:aligned.maxYears,maxPeriods:aligned.maxPeriods};
+  if(!Number.isFinite(fit.slope))return {...fit,financial,baselineUnits,scenarios:[],recommendation:null,periodsUsed:aligned.rows.length,maxYears:aligned.maxYears,maxPeriods:aligned.maxPeriods};
 
   const scenarios=discounts.map(raw=>{
     const discount=finite('discount',raw,{min:0,max:.9});
@@ -214,5 +236,5 @@ export function analyzeMarkdownHistory({history,covariates=[],maxYears=null,maxP
   if(fit.status==='READY'&&scenarios.length){
     recommendation=[...scenarios].sort((a,b)=>b.expectedGrossProfit-a.expectedGrossProfit||a.discount-b.discount)[0];
   }
-  return {...fit,baselineUnits,currentPrice,unitCost,currentInventory,horizonPeriods,leftoverPenalty,runs,scenarios,recommendation,periodsUsed:aligned.rows.length,maxYears:aligned.maxYears,maxPeriods:aligned.maxPeriods};
+  return {...fit,financial,baselineUnits,currentPrice,unitCost,currentInventory,horizonPeriods,leftoverPenalty,runs,scenarios,recommendation,periodsUsed:aligned.rows.length,maxYears:aligned.maxYears,maxPeriods:aligned.maxPeriods};
 }

@@ -184,7 +184,7 @@ export function estimatePriceResponse(rows,{covariateNames=[]}={}){
   if(r2!==null&&r2<0.05)warnings.push('価格・時間トレンド・追加変数でも販売変動をほとんど説明できません。');
   const covariateCoefficients={};
   for(let j=0;j<covCount;j++)covariateCoefficients[covariateNames[j]||`variable_${j+1}`]=beta[3+j];
-  const enough=usable.length>=28&&prices.length>=2&&Math.min(...counts.values())>=5&&beta[1]<0;
+  const enough=usable.length>=28&&prices.length>=2&&Math.min(...counts.values())>=5&&beta[1]<0&&r2!==null&&r2>=0.05;
   return {status:enough?'READY':'HOLD',usable,prices,counts,warnings,slope:beta[1],timeSlope:beta[2],intercept:beta[0],basePrice,r2,residualSd,covariateCoefficients,covariateStats:covStats};
 }
 

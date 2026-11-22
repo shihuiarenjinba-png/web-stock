@@ -27,6 +27,9 @@ test('inventory importer drops only the broken series when one series has an int
   const ins=inspectTable(csv('inventory_internal_gap.csv'));
   assert.equal(ins.detected.column,1);
   assert.equal(ins.series.column[0].name,'SKU-B');
+  assert.equal(ins.rejected.column.length,1);
+  assert.equal(ins.rejected.column[0].name,'SKU-A');
+  assert.equal(ins.rejected.column[0].reason,'internal_gap');
   assert.deepEqual(selectedSeries(ins,'column',[ins.series.column[0].key])[0].values,[15,16,17,18,19]);
   log('inventory_internal_gap',{accepted:['SKU-B'],rejected:['SKU-A'],reason:'internal_gap'});
 });

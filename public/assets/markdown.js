@@ -1,3 +1,5 @@
+import {alignMarkdownCovariates,normalizeDateKey} from './markdown-covariates.js';
+
 function mean(a){return a.reduce((s,v)=>s+v,0)/a.length}
 function sd(a){if(a.length<2)return 0;const m=mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1))}
 function finite(name,v,{min=-Infinity,max=Infinity}={}){const n=Number(v);if(!Number.isFinite(n)||n<min||n>max)throw new Error(`${name} is invalid`);return n}
@@ -15,8 +17,9 @@ export function parseMarkdownHistory(text){
   const find=(re,fallback)=>header?header.findIndex(x=>re.test(x)):fallback;
   const pi=find(/price|価格|単価/,header?null:0), ui=find(/units|sales|qty|販売|数量|個数/,header?null:1);
   const ai=find(/available|stock|在庫|販売可能/,header?null:2), si=find(/stockout|欠品/,header?null:3);
+  const di=find(/^(date|day|time|timestamp|period|日付|年月日|日時|期間|日)$/i,-1);
   if(pi<0||ui<0)throw new Error('price/価格 と units/販売数 の列が必要です。');
-  const rows=[];
+  const rows=[],dates=new Set();
   for(let i=start;i<lines.length;i++){
     const c=split(lines[i]);
     const price=Number(c[pi]),units=Number(c[ui]);
@@ -24,25 +27,49 @@ export function parseMarkdownHistory(text){
     const available=ai>=0&&c[ai]!==undefined&&c[ai]!==''?Number(c[ai]):null;
     if(available!==null&&(!Number.isFinite(available)||available<0))throw new Error(`${i+1}行目の在庫/販売可能数が不正です。`);
     const stockout=si>=0&&c[si]!==undefined?/^(1|true|yes|y|欠品)$/i.test(c[si]):(available!==null&&available<=units);
-    rows.push({price,units,available,stockout,index:rows.length});
+    const date=di>=0?normalizeDateKey(c[di]):null;
+    if(di>=0&&!date)throw new Error(`${i+1}行目の日付が不正です。`);
+    if(date&&dates.has(date))throw new Error(`価格・販売履歴に重複日付 ${date} があります。`);
+    if(date)dates.add(date);
+    rows.push({price,units,available,stockout,date,index:rows.length,covariates:[]});
   }
   if(rows.length<2)throw new Error('履歴が少なすぎます。');
-  return rows;
+  if(di>=0)rows.sort((a,b)=>a.date.localeCompare(b.date));
+  return rows.map((r,index)=>({...r,index}));
 }
 
-function solve3(m,b){
+function solveLinear(m,b){
+  const n=m.length;
+  if(!n||b.length!==n)return null;
   const a=m.map((r,i)=>[...r,b[i]]);
-  for(let i=0;i<3;i++){
-    let p=i;for(let j=i+1;j<3;j++)if(Math.abs(a[j][i])>Math.abs(a[p][i]))p=j;
-    if(Math.abs(a[p][i])<1e-10)return null;
+  for(let i=0;i<n;i++){
+    let p=i;
+    for(let j=i+1;j<n;j++)if(Math.abs(a[j][i])>Math.abs(a[p][i]))p=j;
+    if(!Number.isFinite(a[p][i])||Math.abs(a[p][i])<1e-10)return null;
     [a[i],a[p]]=[a[p],a[i]];
-    const d=a[i][i];for(let k=i;k<4;k++)a[i][k]/=d;
-    for(let j=0;j<3;j++)if(j!==i){const q=a[j][i];for(let k=i;k<4;k++)a[j][k]-=q*a[i][k]}
+    const d=a[i][i];
+    for(let k=i;k<=n;k++)a[i][k]/=d;
+    for(let j=0;j<n;j++)if(j!==i){
+      const q=a[j][i];
+      for(let k=i;k<=n;k++)a[j][k]-=q*a[i][k];
+    }
   }
-  return [a[0][3],a[1][3],a[2][3]];
+  return a.map(r=>r[n]);
 }
 
-export function estimatePriceResponse(rows){
+function standardizeColumns(rows,count){
+  const stats=[];
+  for(let j=0;j<count;j++){
+    const values=rows.map(r=>Number(r.covariates?.[j]));
+    if(values.some(v=>!Number.isFinite(v)))return null;
+    const m=mean(values),s=sd(values);
+    if(!(s>1e-12))return null;
+    stats.push({mean:m,sd:s});
+  }
+  return stats;
+}
+
+export function estimatePriceResponse(rows,{covariateNames=[]}={}){
   const usable=rows.filter(r=>!r.stockout);
   const prices=[...new Set(usable.map(r=>r.price))].sort((a,b)=>a-b);
   const counts=new Map(prices.map(p=>[p,usable.filter(r=>r.price===p).length]));
@@ -51,29 +78,49 @@ export function estimatePriceResponse(rows){
   if(usable.length<28)warnings.push('有効履歴が28期未満です。価格反応の推定は不安定です。');
   if(prices.length<2)warnings.push('価格水準が1つしかないため、値下げ効果を識別できません。');
   if(prices.length>=2&&Math.min(...counts.values())<5)warnings.push('一部価格水準の観測が5期未満です。');
-  if(usable.length<3||prices.length<2)return {status:'HOLD',usable,prices,counts,warnings,slope:null,r2:null,residualSd:null};
+  const covCount=Math.min(covariateNames.length,usable[0]?.covariates?.length||0);
+  if(usable.length<3||prices.length<2)return {status:'HOLD',usable,prices,counts,warnings,slope:null,r2:null,residualSd:null,covariateCoefficients:{}};
+
+  const covStats=standardizeColumns(usable,covCount);
+  if(covCount&&!covStats)return {status:'HOLD',usable,prices,counts,warnings:[...warnings,'欠品除外後に定数化した追加変数があり、回帰できません。'],slope:null,r2:null,residualSd:null,covariateCoefficients:{}};
 
   const basePrice=Math.exp(mean(usable.map(r=>Math.log(r.price))));
   const n=Math.max(1,usable.length-1);
-  const x=usable.map((r,i)=>[1,Math.log(r.price/basePrice),i/n-.5]);
+  const x=usable.map((r,i)=>{
+    const base=[1,Math.log(r.price/basePrice),i/n-.5];
+    for(let j=0;j<covCount;j++)base.push((r.covariates[j]-covStats[j].mean)/covStats[j].sd);
+    return base;
+  });
   const y=usable.map(r=>Math.log1p(r.units));
-  const xtx=Array.from({length:3},()=>Array(3).fill(0)),xty=Array(3).fill(0);
-  for(let i=0;i<x.length;i++)for(let a=0;a<3;a++){xty[a]+=x[i][a]*y[i];for(let c=0;c<3;c++)xtx[a][c]+=x[i][a]*x[i][c]}
-  const beta=solve3(xtx,xty);
-  if(!beta)return {status:'HOLD',usable,prices,counts,warnings:[...warnings,'回帰行列が特異で推定できません。'],slope:null,r2:null,residualSd:null};
-  const fitted=x.map(v=>beta[0]+beta[1]*v[1]+beta[2]*v[2]);
+  const p=x[0].length;
+  const xtx=Array.from({length:p},()=>Array(p).fill(0)),xty=Array(p).fill(0);
+  for(let i=0;i<x.length;i++)for(let a=0;a<p;a++){xty[a]+=x[i][a]*y[i];for(let c=0;c<p;c++)xtx[a][c]+=x[i][a]*x[i][c]}
+  const beta=solveLinear(xtx,xty);
+  if(!beta)return {status:'HOLD',usable,prices,counts,warnings:[...warnings,'回帰行列が特異で推定できません。変数間の強い相関を確認してください。'],slope:null,r2:null,residualSd:null,covariateCoefficients:{}};
+  const fitted=x.map(v=>v.reduce((s,z,j)=>s+z*beta[j],0));
   const residuals=y.map((v,i)=>v-fitted[i]);
   const ybar=mean(y),sst=y.reduce((s,v)=>s+(v-ybar)**2,0),sse=residuals.reduce((s,v)=>s+v*v,0);
   const r2=sst>0?1-sse/sst:null,residualSd=sd(residuals);
   if(beta[1]>=0)warnings.push('履歴では低価格ほど販売数が増える関係を確認できません。値下げ推奨はHOLDです。');
-  if(r2!==null&&r2<0.05)warnings.push('価格・時間トレンドだけでは販売変動をほとんど説明できません。');
+  if(r2!==null&&r2<0.05)warnings.push('価格・時間トレンド・追加変数でも販売変動をほとんど説明できません。');
+  const covariateCoefficients={};
+  for(let j=0;j<covCount;j++)covariateCoefficients[covariateNames[j]||`variable_${j+1}`]=beta[3+j];
   const enough=usable.length>=28&&prices.length>=2&&Math.min(...counts.values())>=5&&beta[1]<0;
-  return {status:enough?'READY':'HOLD',usable,prices,counts,warnings,slope:beta[1],timeSlope:beta[2],intercept:beta[0],basePrice,r2,residualSd};
+  return {status:enough?'READY':'HOLD',usable,prices,counts,warnings,slope:beta[1],timeSlope:beta[2],intercept:beta[0],basePrice,r2,residualSd,covariateCoefficients,covariateStats:covStats};
 }
 
-export function analyzeMarkdownHistory({history,currentPrice,unitCost,currentInventory,horizonPeriods=30,discounts=[0,.05,.1,.15,.2],leftoverPenalty=0,runs=3000}){
-  const rows=typeof history==='string'?parseMarkdownHistory(history):history;
-  const fit=estimatePriceResponse(rows);
+export function analyzeMarkdownHistory({history,covariates=[],currentPrice,unitCost,currentInventory,horizonPeriods=30,discounts=[0,.05,.1,.15,.2],leftoverPenalty=0,runs=3000}){
+  const rawRows=typeof history==='string'?parseMarkdownHistory(history):history;
+  const aligned=alignMarkdownCovariates(rawRows,covariates);
+  const fit=estimatePriceResponse(aligned.rows,{covariateNames:aligned.covariateNames});
+  fit.warnings=[...aligned.warnings,...fit.warnings];
+  fit.covariateNames=aligned.covariateNames;
+  fit.correlationDiagnostics=aligned.diagnostics;
+  if(aligned.hardMulticollinearity){
+    fit.status='HOLD';
+    fit.warnings.push('説明変数間の相関が強すぎるため、価格推奨を停止しました。変数を減らしてください。');
+  }
+
   currentPrice=finite('currentPrice',currentPrice,{min:0.000001});
   unitCost=finite('unitCost',unitCost,{min:0});
   currentInventory=finite('currentInventory',currentInventory,{min:0});
@@ -84,7 +131,7 @@ export function analyzeMarkdownHistory({history,currentPrice,unitCost,currentInv
   const currentObserved=recent.filter(r=>Math.abs(r.price-currentPrice)/currentPrice<0.03);
   const baselinePool=currentObserved.length>=3?currentObserved:recent;
   const baselineUnits=baselinePool.length?mean(baselinePool.map(r=>r.units)):0;
-  if(!Number.isFinite(fit.slope))return {...fit,baselineUnits,scenarios:[],recommendation:null};
+  if(!Number.isFinite(fit.slope))return {...fit,baselineUnits,scenarios:[],recommendation:null,periodsUsed:aligned.rows.length};
 
   const scenarios=discounts.map(raw=>{
     const discount=finite('discount',raw,{min:0,max:.9});
@@ -109,5 +156,5 @@ export function analyzeMarkdownHistory({history,currentPrice,unitCost,currentInv
   if(fit.status==='READY'&&scenarios.length){
     recommendation=[...scenarios].sort((a,b)=>b.expectedGrossProfit-a.expectedGrossProfit||a.discount-b.discount)[0];
   }
-  return {...fit,baselineUnits,currentPrice,unitCost,currentInventory,horizonPeriods,leftoverPenalty,runs,scenarios,recommendation};
+  return {...fit,baselineUnits,currentPrice,unitCost,currentInventory,horizonPeriods,leftoverPenalty,runs,scenarios,recommendation,periodsUsed:aligned.rows.length};
 }

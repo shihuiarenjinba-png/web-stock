@@ -1,4 +1,4 @@
-import {analyzeMarkdownHistory} from './markdown.js';
+import {analyzeMarkdownHistory,parseMarkdownHistoryWorkbook} from './markdown.js';
 import {loadWorkbook} from './importer.js';
 import {MAX_MARKDOWN_COVARIATES,parseCovariateWorkbook} from './markdown-covariates.js';
 import {markdownHistoryPolicy} from './plan-limits.js';
@@ -8,6 +8,7 @@ function pct(v){return (100*v).toFixed(1)+'%'}
 function yen(v){return Number.isFinite(v)?Math.round(v).toLocaleString('ja-JP')+'円':'—'}
 
 let markdownCovariates=[];
+let markdownCoreHistory=null;
 
 function render(result){
  const status=$('markdownStatus'),out=$('markdownResults'),table=$('markdownTableBody'),notes=$('markdownNotes');
@@ -37,6 +38,35 @@ function render(result){
    :'十分な価格履歴、または安定した変数構成がないため、値下げ率の推奨は行いません。';
  out.classList.remove('hidden');
 }
+
+function showCoreHistory(){
+ const el=$('markdownCoreStatus');
+ if(!el)return;
+ if(!markdownCoreHistory){el.textContent='基準履歴ファイルが選択されていません';return;}
+ el.textContent=`${markdownCoreHistory.file} / ${markdownCoreHistory.sheet} / ${markdownCoreHistory.rows.length}期`;
+}
+
+$('markdownCoreFile')?.addEventListener('change',async e=>{
+ markdownCoreHistory=null;
+ const file=e.target.files?.[0];
+ try{
+   if(!file)throw new Error('基準履歴ファイルを選択してください。');
+   const workbook=await loadWorkbook(file);
+   const parsed=parseMarkdownHistoryWorkbook(workbook);
+   markdownCoreHistory={...parsed,file:file.name};
+   showCoreHistory();
+ }catch(err){
+   e.target.value='';
+   markdownCoreHistory=null;
+   showCoreHistory();
+   $('markdownResults').classList.remove('hidden');
+   $('markdownRecommendation').textContent=err.message||String(err);
+   $('markdownTableBody').innerHTML='';
+   $('markdownNotes').textContent='';
+ }
+});
+
+showCoreHistory();
 
 function showCovariateFiles(){
  const el=$('markdownCovariateStatus');
@@ -84,10 +114,11 @@ $('markdownForm')?.addEventListener('submit',e=>{
  e.preventDefault();
  try{
   if(!Array.isArray(globalThis.demandScopeCapabilities)||!globalThis.demandScopeCapabilities.includes('markdown'))throw new Error('値下げ判断を利用できる契約が必要です。');
+  if(!markdownCoreHistory?.rows?.length)throw new Error('date / price / units を含む基準履歴ファイルを選択してください。');
   const discounts=$('markdownDiscounts').value.split(/[\s,，、;；]+/).filter(Boolean).map(x=>Number(x)/100);
   const policy=markdownHistoryPolicy(globalThis.demandScopeCapabilities);
   const r=analyzeMarkdownHistory({
-    history:$('markdownHistory').value,
+    history:markdownCoreHistory?.rows,
     covariates:markdownCovariates,
     maxYears:policy.maxYears,
     maxPeriods:policy.maxPeriods,

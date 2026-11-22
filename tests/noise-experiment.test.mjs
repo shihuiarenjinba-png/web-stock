@@ -95,3 +95,15 @@ test('price-like added variable triggers multicollinearity HOLD',()=>{
   assert.equal(s.status,'HOLD');
   assert.ok(s.warnings.some(x=>x.includes('多重共線性')));
 });
+
+
+test('extreme units outlier is surfaced so price-response distortion is visible',()=>{
+  const s=summarize('units_outlier.csv',analyze('units_outlier.csv'));
+  assert.ok(s.financialWarnings.some(x=>x.includes('外れ値')));
+  console.log('NOISE_EXPERIMENT '+JSON.stringify({fixture:'units_outlier_model_effect',status:s.status,r2:s.r2,slope:s.slope,recommendation:s.recommendation}));
+});
+
+test('missing optional revenue or cost values are currently rejected explicitly',()=>{
+  assert.throws(()=>parseMarkdownHistoryTable(readCsv('missing_optional_finance.csv')),/(売上|単位原価).*数値/);
+  console.log('NOISE_EXPERIMENT '+JSON.stringify({fixture:'missing_optional_finance.csv',status:'REJECTED',reason:'optional_finance_missing_value'}));
+});

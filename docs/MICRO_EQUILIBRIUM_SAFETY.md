@@ -39,7 +39,16 @@ DemandScope may estimate demand response, supply response, and a model-implied e
    - Profit optimization answers: “which candidate price maximizes the specified expected-profit objective.”
    - These are different questions and must not be merged into one recommendation.
 
-6. **Uncertainty**
+6. **Historical equilibrium-gap diagnostic**
+   - For each observation where a model equilibrium is estimable, define a signed gap between actual price and model equilibrium, preferably as a log-price gap so percentages are symmetric.
+   - A persistent gap is not automatically an error.
+   - Without unit-cost data, DemandScope may report only whether sales volume remained resilient or weakened during historically large-gap periods.
+   - Without unit-cost data, it must not label the gap as profitable, optimal, rational, or sustainable.
+   - With unit-cost data, gross-margin or gross-profit evidence may be added, but it still does not prove causality because unobserved strategy and cross-product economics can remain.
+   - If large gaps historically coexist with maintained sales, surface a neutral label such as `HISTORICALLY_TOLERATED_GAP` rather than forcing convergence toward equilibrium.
+   - If large gaps coincide with weak sales, describe this as an observed association, not proof that the gap caused the weakness.
+
+7. **Uncertainty**
    - Do not require the raw price or quantity series themselves to be normally distributed for OLS point estimates.
    - Prefer robust/bootstrapped uncertainty for regression-derived equilibrium when implemented.
    - Normality assumptions used by inventory Monte Carlo must remain separately disclosed and must not be silently transferred to the microeconomic regression model.

@@ -22,7 +22,7 @@ jobs:
       - name: Test economic sample updater
         run: |
           pip install "pandas>=2.2,<3"
-          python tests/test_estat_economic_samples.py
+          PYTHONPATH=. python tests/test_estat_economic_samples.py
           python -m py_compile scripts/update_estat_economic_samples.py
       - name: Verify no secrets are committed and Pages layout is intact
         run: |

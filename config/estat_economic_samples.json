@@ -1,0 +1,46 @@
+{
+  "source_name": "景気動向指数 採用系列",
+  "publisher": "内閣府",
+  "statistics_code": "00100406",
+  "stats_data_id": "0003446462",
+  "source_page": "https://www.e-stat.go.jp/dbview?sid=0003446462",
+  "terms_url": "https://www.e-stat.go.jp/terms-of-use",
+  "history_months": 120,
+  "date_convention": "month_start_for_demandscope",
+  "selection_policy": "DemandScope default samples must have a defensible consumption/demand interpretation. Sector-specific or ambiguous macro variables remain disabled until product-specific evidence justifies them.",
+  "variables": [
+    {
+      "id": "consumer_confidence_index",
+      "approved": true,
+      "source_label_contains": "(先行)_L6消費者態度指数",
+      "transform": "identity",
+      "unit": "index points",
+      "filename": "japan-consumer-confidence.csv",
+      "research_status": "Approved default demand covariate",
+      "research_reference": "Abe (2012), Journal of Household Economics 36, 59-72; Cabinet Office Consumer Confidence Survey methodology",
+      "selection_reason": "Japan evidence finds consumer confidence influences consumption expenditure even controlling for disposable income; the official survey is designed to capture prospects relevant to consumption and durable-goods purchasing."
+    },
+    {
+      "id": "core_cpi_yoy_pct",
+      "approved": false,
+      "source_label_contains": "(遅行)_Lg8消費者物価指数(生鮮食品を除く総合)(前年同月比)",
+      "transform": "identity",
+      "unit": "% YoY",
+      "filename": "japan-core-cpi-yoy.csv",
+      "research_status": "Candidate only",
+      "research_reference": "Jinnai et al. (2021/2023 publication page), Household Inflation Expectation and Consumption: Evidence from Japan",
+      "exclusion_reason": "Inflation/consumption effects are context dependent, and CPI itself is not a generally significant product-demand predictor. Keep disabled until a product class or model specifically justifies it."
+    },
+    {
+      "id": "industrial_production_yoy_pct",
+      "approved": false,
+      "source_label_contains": "(一致)_C1生産指数(鉱工業)",
+      "transform": "pct_change_12",
+      "unit": "% YoY",
+      "filename": "japan-industrial-production-yoy.csv",
+      "research_status": "Candidate for B2B/industrial demand only",
+      "research_reference": "Macroeconomic activity indicator; not treated as a general consumer-product demand predictor.",
+      "exclusion_reason": "Industrial production is better suited to industrial/B2B demand than a generic DemandScope default."
+    }
+  ]
+}

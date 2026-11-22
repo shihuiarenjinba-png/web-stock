@@ -37,7 +37,7 @@ function pair(rows,a,b){
 export function buildFinancialRows(rows){
   return rows.map(r=>{
     const calculatedRevenue=r.price*r.units;
-    const revenue=Number.isFinite(r.revenue)?r.revenue:calculatedRevenue;
+    const revenue=Number.isFinite(r.revenueReported)?r.revenueReported:calculatedRevenue;
     const totalCost=Number.isFinite(r.totalCost)
       ? r.totalCost
       : Number.isFinite(r.unitCostHistorical)?r.unitCostHistorical*r.units:null;

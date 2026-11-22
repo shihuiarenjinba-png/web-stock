@@ -97,9 +97,12 @@ test('price-like added variable triggers multicollinearity HOLD',()=>{
 });
 
 
-test('extreme units outlier is surfaced so price-response distortion is visible',()=>{
+test('extreme units outlier blocks the price recommendation',()=>{
   const s=summarize('units_outlier.csv',analyze('units_outlier.csv'));
   assert.ok(s.financialWarnings.some(x=>x.includes('外れ値')));
+  assert.equal(s.status,'HOLD');
+  assert.equal(s.recommendation,null);
+  assert.ok(s.warnings.some(x=>x.includes('5標準偏差')));
   console.log('NOISE_EXPERIMENT '+JSON.stringify({fixture:'units_outlier_model_effect',status:s.status,r2:s.r2,slope:s.slope,recommendation:s.recommendation}));
 });
 

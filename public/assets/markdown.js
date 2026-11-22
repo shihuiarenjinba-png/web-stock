@@ -1,4 +1,5 @@
 import {alignMarkdownCovariates,normalizeDateKey} from './markdown-covariates.js';
+import {numberOrNull} from './importer.js';
 
 function mean(a){return a.reduce((s,v)=>s+v,0)/a.length}
 function sd(a){if(a.length<2)return 0;const m=mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1))}
@@ -6,6 +7,63 @@ function finite(name,v,{min=-Infinity,max=Infinity}={}){const n=Number(v);if(!Nu
 function rng(seed=0x9e3779b9){let s=seed>>>0;return()=>{s=(s+0x6D2B79F5)>>>0;let t=s;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296}}
 function gaussian(r){return Math.sqrt(-2*Math.log(Math.max(r(),1e-12)))*Math.cos(2*Math.PI*r())}
 function seedFrom(rows,discount){let x=2166136261;for(const r of rows){for(const v of [r.price,r.units]){x^=Math.round(v*100);x=Math.imul(x,16777619)}}x^=Math.round(discount*10000);return x>>>0}
+
+const CORE_DATE_HEADER=/^(date|day|time|timestamp|period|日付|年月日|日時|期間|日)$/i;
+const CORE_PRICE_HEADER=/^(price|unit_price|selling_price|価格|単価|販売価格)$/i;
+const CORE_UNITS_HEADER=/^(units|sales|qty|quantity|units_sold|販売|販売数|数量|個数|販売個数)$/i;
+const CORE_AVAILABLE_HEADER=/^(available|stock|inventory|在庫|販売可能|販売可能数)$/i;
+const CORE_STOCKOUT_HEADER=/^(stockout|out_of_stock|欠品|品切れ)$/i;
+
+function uniqueHeaderIndex(header,re,label){
+  const hits=header.map((v,i)=>re.test(String(v??'').trim())?i:-1).filter(i=>i>=0);
+  if(hits.length!==1)throw new Error(`基準履歴ファイルには ${label} 列を1つだけ含めてください。`);
+  return hits[0];
+}
+
+export function parseMarkdownHistoryTable(rows){
+  if(!Array.isArray(rows)||rows.length<2)throw new Error('基準履歴ファイルにヘッダーとデータが必要です。');
+  const nonEmpty=rows.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
+  if(nonEmpty.length<2)throw new Error('基準履歴ファイルに有効なデータがありません。');
+  const header=nonEmpty[0].map(v=>String(v??'').trim());
+  const di=uniqueHeaderIndex(header,CORE_DATE_HEADER,'date/日付');
+  const pi=uniqueHeaderIndex(header,CORE_PRICE_HEADER,'price/価格');
+  const ui=uniqueHeaderIndex(header,CORE_UNITS_HEADER,'units/販売数');
+  const ai=header.findIndex(v=>CORE_AVAILABLE_HEADER.test(v));
+  const si=header.findIndex(v=>CORE_STOCKOUT_HEADER.test(v));
+  const rowsOut=[],dates=new Set();
+  for(let r=1;r<nonEmpty.length;r++){
+    const row=nonEmpty[r];
+    const date=normalizeDateKey(row?.[di]);
+    const price=numberOrNull(row?.[pi]);
+    const units=numberOrNull(row?.[ui]);
+    if(!date)throw new Error(`${r+1}行目の日付が不正です。`);
+    if(dates.has(date))throw new Error(`基準履歴ファイルに重複日付 ${date} があります。`);
+    if(!Number.isFinite(price)||price<=0)throw new Error(`${r+1}行目の価格が正の数値ではありません。`);
+    if(!Number.isFinite(units)||units<0)throw new Error(`${r+1}行目の販売数が0以上の数値ではありません。`);
+    let available=null;
+    if(ai>=0&&row?.[ai]!==''&&row?.[ai]!==null&&row?.[ai]!==undefined){
+      available=numberOrNull(row[ai]);
+      if(!Number.isFinite(available)||available<0)throw new Error(`${r+1}行目の在庫/販売可能数が不正です。`);
+    }
+    const rawStockout=si>=0?row?.[si]:null;
+    const stockout=si>=0?/^(1|true|yes|y|欠品|品切れ)$/i.test(String(rawStockout??'').trim()):(available!==null&&available<=units);
+    dates.add(date);
+    rowsOut.push({date,price,units,available,stockout,index:rowsOut.length,covariates:[]});
+  }
+  if(rowsOut.length<2)throw new Error('基準履歴ファイルの有効履歴が少なすぎます。');
+  rowsOut.sort((a,b)=>a.date.localeCompare(b.date));
+  return rowsOut.map((row,index)=>({...row,index}));
+}
+
+export function parseMarkdownHistoryWorkbook(workbook){
+  if(!workbook?.sheets?.length)throw new Error('基準履歴ファイルを読み込めません。');
+  const errors=[];
+  for(const sheet of workbook.sheets){
+    try{return {rows:parseMarkdownHistoryTable(sheet.rows),sheet:sheet.name};}
+    catch(e){errors.push(`${sheet.name}: ${e.message}`);}
+  }
+  throw new Error(errors[0]||'date / price / units を含むシートがありません。');
+}
 
 export function parseMarkdownHistory(text){
   const lines=String(text??'').trim().split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
@@ -18,7 +76,7 @@ export function parseMarkdownHistory(text){
   const pi=find(/price|価格|単価/,header?null:0), ui=find(/units|sales|qty|販売|数量|個数/,header?null:1);
   const ai=find(/available|stock|在庫|販売可能/,header?null:2), si=find(/stockout|欠品/,header?null:3);
   const di=find(/^(date|day|time|timestamp|period|日付|年月日|日時|期間|日)$/i,-1);
-  if(pi<0||ui<0)throw new Error('price/価格 と units/販売数 の列が必要です。');
+  if(pi<0||ui<0||di<0)throw new Error('date/日付、price/価格、units/販売数 の3列が必要です。');
   const rows=[],dates=new Set();
   for(let i=start;i<lines.length;i++){
     const c=split(lines[i]);

@@ -64,7 +64,11 @@ test('noisy fixture still runs and surfaces outliers/uncertainty',()=>{
   console.log('FIXTURE_ANALYSIS noisy',JSON.stringify(summary));
   assert.ok(Number.isFinite(result.slope));
   assert.ok(Number.isFinite(result.r2));
+  assert.ok(result.r2<0.05);
+  assert.equal(result.status,'HOLD');
+  assert.equal(result.recommendation,null);
   assert.ok(summary.outlierCount>0);
+  assert.ok(result.warnings.some(w=>w.includes('ほとんど説明できません')));
   assert.ok(result.financial.warnings.length>0);
 });
 

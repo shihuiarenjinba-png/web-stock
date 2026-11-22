@@ -1,4 +1,5 @@
 import {alignMarkdownCovariates,normalizeDateKey} from './markdown-covariates.js';
+import {numberOrNull} from './importer.js';
 
 function mean(a){return a.reduce((s,v)=>s+v,0)/a.length}
 function sd(a){if(a.length<2)return 0;const m=mean(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/(a.length-1))}
@@ -33,15 +34,15 @@ export function parseMarkdownHistoryTable(rows){
   for(let r=1;r<nonEmpty.length;r++){
     const row=nonEmpty[r];
     const date=normalizeDateKey(row?.[di]);
-    const price=Number(row?.[pi]);
-    const units=Number(row?.[ui]);
+    const price=numberOrNull(row?.[pi]);
+    const units=numberOrNull(row?.[ui]);
     if(!date)throw new Error(`${r+1}行目の日付が不正です。`);
     if(dates.has(date))throw new Error(`基準履歴ファイルに重複日付 ${date} があります。`);
     if(!Number.isFinite(price)||price<=0)throw new Error(`${r+1}行目の価格が正の数値ではありません。`);
     if(!Number.isFinite(units)||units<0)throw new Error(`${r+1}行目の販売数が0以上の数値ではありません。`);
     let available=null;
     if(ai>=0&&row?.[ai]!==''&&row?.[ai]!==null&&row?.[ai]!==undefined){
-      available=Number(row[ai]);
+      available=numberOrNull(row[ai]);
       if(!Number.isFinite(available)||available<0)throw new Error(`${r+1}行目の在庫/販売可能数が不正です。`);
     }
     const rawStockout=si>=0?row?.[si]:null;

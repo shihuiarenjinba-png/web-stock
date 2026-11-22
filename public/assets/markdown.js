@@ -1,5 +1,5 @@
 import {alignMarkdownCovariates,normalizeDateKey} from './markdown-covariates.js';
-import {numberOrNull} from './importer.js';
+import {numberOrNull,transposeTable} from './importer.js';
 import {analyzeFinancialHistory} from './markdown-financial.js';
 
 function mean(a){return a.reduce((s,v)=>s+v,0)/a.length}
@@ -18,6 +18,19 @@ const CORE_REVENUE_HEADER=/^(revenue|sales_revenue|net_sales|売上|売上高|�
 const CORE_UNIT_COST_HEADER=/^(unit_cost|cost_per_unit|仕入単価|単位原価|原価単価)$/i;
 const CORE_TOTAL_COST_HEADER=/^(total_cost|cost|costs|費用|総費用|売上原価)$/i;
 
+function headerHas(row,re){return (row||[]).some(v=>re.test(String(v??'').trim()))}
+function coreOrientation(raw){
+  const rows=raw.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
+  if(!rows.length)return {rows,orientation:'row'};
+  const first=rows[0]||[];
+  const rowForm=headerHas(first,CORE_DATE_HEADER)&&headerHas(first,CORE_PRICE_HEADER)&&headerHas(first,CORE_UNITS_HEADER);
+  if(rowForm)return {rows,orientation:'row'};
+  const firstCol=rows.map(r=>r?.[0]);
+  const transposedForm=headerHas(firstCol,CORE_DATE_HEADER)&&headerHas(firstCol,CORE_PRICE_HEADER)&&headerHas(firstCol,CORE_UNITS_HEADER);
+  if(transposedForm)return {rows:transposeTable(rows),orientation:'transposed'};
+  return {rows,orientation:'row'};
+}
+
 function uniqueHeaderIndex(header,re,label){
   const hits=header.map((v,i)=>re.test(String(v??'').trim())?i:-1).filter(i=>i>=0);
   if(hits.length!==1)throw new Error(`基準履歴ファイルには ${label} 列を1つだけ含めてください。`);
@@ -26,7 +39,8 @@ function uniqueHeaderIndex(header,re,label){
 
 export function parseMarkdownHistoryTable(rows){
   if(!Array.isArray(rows)||rows.length<2)throw new Error('基準履歴ファイルにヘッダーとデータが必要です。');
-  const nonEmpty=rows.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
+  const oriented=coreOrientation(rows);
+  const nonEmpty=oriented.rows.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
   if(nonEmpty.length<2)throw new Error('基準履歴ファイルに有効なデータがありません。');
   const header=nonEmpty[0].map(v=>String(v??'').trim());
   const di=uniqueHeaderIndex(header,CORE_DATE_HEADER,'date/日付');
@@ -80,7 +94,7 @@ export function parseMarkdownHistoryWorkbook(workbook){
   if(!workbook?.sheets?.length)throw new Error('基準履歴ファイルを読み込めません。');
   const errors=[];
   for(const sheet of workbook.sheets){
-    try{return {rows:parseMarkdownHistoryTable(sheet.rows),sheet:sheet.name};}
+    try{const oriented=coreOrientation(sheet.rows);return {rows:parseMarkdownHistoryTable(sheet.rows),sheet:sheet.name,orientation:oriented.orientation};}
     catch(e){errors.push(`${sheet.name}: ${e.message}`);}
   }
   throw new Error(errors[0]||'date / price / units を含むシートがありません。');

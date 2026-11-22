@@ -3,7 +3,7 @@ import test from 'node:test';
 import {parseMarkdownHistory,estimatePriceResponse,analyzeMarkdownHistory} from '../public/assets/markdown.js';
 
 test('parses bilingual history and marks censored stockouts',()=>{
- const x=parseMarkdownHistory('価格,販売数,在庫\n1000,5,20\n900,10,10');
+ const x=parseMarkdownHistory('日付,価格,販売数,在庫\n2026-01-01,1000,5,20\n2026-01-02,900,10,10');
  assert.equal(x.length,2);assert.equal(x[0].stockout,false);assert.equal(x[1].stockout,true);
 });
 

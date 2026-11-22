@@ -8,7 +8,7 @@ import {
   parseCovariateTable
 } from '../public/assets/markdown-covariates.js';
 import {markdownHistoryPolicy} from '../public/assets/plan-limits.js';
-import {analyzeMarkdownHistory} from '../public/assets/markdown.js';
+import {analyzeMarkdownHistory,parseMarkdownHistoryTable} from '../public/assets/markdown.js';
 
 function day(i,start='2020-01-01'){
   const d=new Date(start+'T00:00:00Z');
@@ -128,4 +128,37 @@ test('holds recommendation when an added variable is almost the same as price',(
   assert.equal(x.status,'HOLD');
   assert.equal(x.recommendation,null);
   assert.ok(x.warnings.some(w=>w.includes('多重共線性')));
+});
+
+
+test('core history file requires date price and units in the same table',()=>{
+  const rows=parseMarkdownHistoryTable([
+    ['date','price','units','inventory'],
+    ['2026-01-01','1,000',8,40],
+    ['2026-01-02',900,11,29]
+  ]);
+  assert.equal(rows.length,2);
+  assert.equal(rows[0].price,1000);
+  assert.equal(rows[1].units,11);
+});
+
+test('core history file rejects missing price column',()=>{
+  assert.throws(()=>parseMarkdownHistoryTable([
+    ['date','units'],
+    ['2026-01-01',8],
+    ['2026-01-02',11]
+  ]),/price\/価格/);
+});
+
+test('core history file rejects duplicated dates and malformed price',()=>{
+  assert.throws(()=>parseMarkdownHistoryTable([
+    ['date','price','units'],
+    ['2026-01-01',1000,8],
+    ['2026-01-01',900,11]
+  ]),/重複日付/);
+  assert.throws(()=>parseMarkdownHistoryTable([
+    ['date','price','units'],
+    ['2026-01-01','abc',8],
+    ['2026-01-02',900,11]
+  ]),/価格が正の数値/);
 });

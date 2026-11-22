@@ -7,10 +7,17 @@ import {
   normalizeDateKey,
   parseCovariateTable
 } from '../public/assets/markdown-covariates.js';
+import {markdownHistoryPolicy} from '../public/assets/plan-limits.js';
 import {analyzeMarkdownHistory} from '../public/assets/markdown.js';
 
-function day(i){
-  const d=new Date(Date.UTC(2024,0,1+i));
+function day(i,start='2020-01-01'){
+  const d=new Date(start+'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate()+i);
+  return d.toISOString().slice(0,10);
+}
+
+function month(i,startYear=2010){
+  const d=new Date(Date.UTC(startYear,i,1));
   return d.toISOString().slice(0,10);
 }
 
@@ -51,7 +58,7 @@ test('aligns multiple variables by common dates only',()=>{
   const history=coreRows(40);
   const a={name:'promo',map:new Map(Array.from({length:35},(_,i)=>[day(i+5),i%2]))};
   const b={name:'cpi',map:new Map(Array.from({length:30},(_,i)=>[day(i+8),100+i*.1]))};
-  const x=alignMarkdownCovariates(history,[a,b]);
+  const x=alignMarkdownCovariates(history,[a,b],{maxPeriods:2000,maxYears:5});
   assert.equal(x.rows.length,30);
   assert.equal(x.rows[0].date,day(8));
   assert.equal(x.rows.at(-1).date,day(37));
@@ -65,17 +72,42 @@ test('limits explanatory variables to four',()=>{
     name:'v'+j,
     map:new Map(history.map((r,i)=>[r.date,i+j]))
   }));
-  assert.throws(()=>alignMarkdownCovariates(history,vars),/最大4個/);
+  assert.throws(()=>alignMarkdownCovariates(history,vars,{maxPeriods:2000,maxYears:5}),/最大4個/);
 });
 
-test('caps analysis to the most recent 730 periods',()=>{
+test('hard observation cap keeps only the most recent 4000 points',()=>{
   const rows=Array.from({length:MAX_MARKDOWN_PERIODS+20},(_,i)=>({
-    date:day(i),price:i%2?1000:900,units:10+(i%3),stockout:false,index:i,covariates:[]
+    date:day(i,'2010-01-01'),price:i%2?1000:900,units:10+(i%3),stockout:false,index:i,covariates:[]
   }));
-  const x=alignMarkdownCovariates(rows,[]);
+  const x=alignMarkdownCovariates(rows,[],{maxPeriods:MAX_MARKDOWN_PERIODS});
   assert.equal(x.rows.length,MAX_MARKDOWN_PERIODS);
-  assert.equal(x.rows[0].date,day(20));
-  assert.ok(x.warnings.some(w=>w.includes('直近730期')));
+  assert.equal(x.rows[0].date,day(20,'2010-01-01'));
+  assert.ok(x.warnings.some(w=>w.includes('4000観測点')));
+});
+
+test('5-year tier trims older daily history by calendar span',()=>{
+  const rows=Array.from({length:7*366},(_,i)=>({
+    date:day(i,'2018-01-01'),price:i%3===0?1000:900,units:10+(i%4),stockout:false,index:i,covariates:[]
+  }));
+  const x=alignMarkdownCovariates(rows,[],{maxYears:5,maxPeriods:2000});
+  assert.ok(x.rows.length<=1832);
+  assert.ok(x.rows.length>1800);
+  assert.ok(x.warnings.some(w=>w.includes('直近5年')));
+});
+
+test('10-year tier keeps ten years of monthly data regardless of low row count',()=>{
+  const rows=Array.from({length:180},(_,i)=>({
+    date:month(i),price:i%3===0?1000:900,units:10+(i%4),stockout:false,index:i,covariates:[]
+  }));
+  const x=alignMarkdownCovariates(rows,[],{maxYears:10,maxPeriods:4000});
+  assert.equal(x.rows.length,121);
+  assert.equal(x.rows[0].date,'2014-12-01');
+  assert.equal(x.rows.at(-1).date,'2024-12-01');
+});
+
+test('plan policy maps normal markdown to 5 years and markdown10 to 10 years',()=>{
+  assert.deepEqual(markdownHistoryPolicy(['markdown']),{maxYears:5,maxPeriods:2000,tier:'5y'});
+  assert.deepEqual(markdownHistoryPolicy(['markdown','markdown10']),{maxYears:10,maxPeriods:4000,tier:'10y'});
 });
 
 test('holds recommendation when an added variable is almost the same as price',()=>{
@@ -84,6 +116,8 @@ test('holds recommendation when an added variable is almost the same as price',(
   const x=analyzeMarkdownHistory({
     history,
     covariates:[competitor],
+    maxYears:5,
+    maxPeriods:2000,
     currentPrice:1000,
     unitCost:500,
     currentInventory:350,

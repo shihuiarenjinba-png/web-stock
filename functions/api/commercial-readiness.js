@@ -68,7 +68,7 @@ export async function onRequestGet({env}){
  const notes=[];
  if(mode!=='live')notes.push('Live billing is still gated off.');
  if(!priceId&&mode==='live')notes.push('A live recurring Stripe Price ID is required.');
- if(mode==='live'&&livePrice.checked&&!livePrice.verified)notes.push('All three live DemandScope plan prices must be active and match Inventory JPY 980 / Markdown JPY 980 / Bundle JPY 1800 monthly.');
+ if(mode==='live'&&livePrice.checked&&!livePrice.verified)notes.push('All four live DemandScope plan prices must be active and match Inventory JPY 980 / Markdown 5Y JPY 980 / Markdown 10Y JPY 1580 / Bundle JPY 1800 monthly.');
  if(!legal.refund_policy_confirmed)notes.push('Refund policy must be explicitly confirmed before live sales.');
  if(mode==='live'&&account.checked&&account.payouts_enabled!==true)notes.push('Stripe payouts must be enabled before live launch.');
  if(mode==='live'&&!google.configured)notes.push('Google OAuth must be fully configured before live sales.');

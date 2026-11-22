@@ -22,8 +22,8 @@ export async function ensureCapacityTable(db){
 }
 async function cleanupExpired(db,now){await db.prepare('DELETE FROM capacity_reservations WHERE expires_at<=?').bind(now).run()}
 
-function priceSet(priceId,priceIds){const values=Array.isArray(priceIds)&&priceIds.length?priceIds:[priceId].filter(Boolean);return [...new Set(values)].slice(0,3)}
-function capacityPriceSql(values){return values.length===3?'price_id IN (?,?,?)':values.length===2?'price_id IN (?,?)':'price_id=?'}
+function priceSet(priceId,priceIds){const values=Array.isArray(priceIds)&&priceIds.length?priceIds:[priceId].filter(Boolean);return [...new Set(values)].slice(0,8)}
+function capacityPriceSql(values){return values.length>1?`price_id IN (${values.map(()=>'?').join(',')})`:'price_id=?'}
 
 export async function demandScopeCapacity(db,{priceId,priceIds,now}={}){
   const ts=nowSeconds(now);

@@ -1,6 +1,7 @@
 import {analyzeMarkdownHistory} from './markdown.js';
 import {loadWorkbook} from './importer.js';
 import {MAX_MARKDOWN_COVARIATES,parseCovariateWorkbook} from './markdown-covariates.js';
+import {markdownHistoryPolicy} from './plan-limits.js';
 
 const $=id=>document.getElementById(id);
 function pct(v){return (100*v).toFixed(1)+'%'}
@@ -21,6 +22,7 @@ function render(result){
    .filter(x=>Math.abs(x.r)>=0.85)
    .map(x=>`相関注意 ${x.a} × ${x.b}: r=${x.r.toFixed(3)}`);
  notes.textContent=[
+   `契約上限: ${result.maxYears ?? '—'}年 / 最大${result.maxPeriods ?? '—'}観測点`,
    `使用期間: ${result.periodsUsed ?? result.usable.length}期 / 有効履歴: ${result.usable.length}期 / 価格水準: ${result.prices.length}`,
    variableText,
    result.slope===null?'価格反応: 推定不可':`価格反応係数: ${result.slope.toFixed(3)} / R²: ${result.r2===null?'—':result.r2.toFixed(3)}`,
@@ -83,9 +85,12 @@ $('markdownForm')?.addEventListener('submit',e=>{
  try{
   if(!Array.isArray(globalThis.demandScopeCapabilities)||!globalThis.demandScopeCapabilities.includes('markdown'))throw new Error('値下げ判断を利用できる契約が必要です。');
   const discounts=$('markdownDiscounts').value.split(/[\s,，、;；]+/).filter(Boolean).map(x=>Number(x)/100);
+  const policy=markdownHistoryPolicy(globalThis.demandScopeCapabilities);
   const r=analyzeMarkdownHistory({
     history:$('markdownHistory').value,
     covariates:markdownCovariates,
+    maxYears:policy.maxYears,
+    maxPeriods:policy.maxPeriods,
     currentPrice:Number($('markdownCurrentPrice').value),
     unitCost:Number($('markdownUnitCost').value),
     currentInventory:Number($('markdownInventory').value),

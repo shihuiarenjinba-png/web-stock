@@ -14,11 +14,11 @@ Pro権限は、(1) Checkout開始ブラウザのHttpOnly署名CookieとStripe Su
 
 Stripe Customer Portalのメールログインは契約管理用です。別端末ではGoogle本人認証後、内部memberとStripe Customerの紐付けが確認できた場合にPro権限を再検証します。
 
-現在のLive Productは `DemandScope Pro` で、3つの月額Priceを使用します：Inventory 980円、Markdown Decision 980円、Bundle 1,800円。NamiDataの商品・Priceは流用しません。
+現在のLive Productは `DemandScope Pro` で、4つの月額Priceを使用します：Inventory 980円、Markdown Decision 5年版 980円、Markdown Decision 10年版 1,580円、Bundle 1,800円。NamiDataの商品・Priceは流用しません。
 
 ## 現在の商用公開準備（2026-11-09）
 
-- 本番価格: **Inventory 980円/月 / Markdown Decision 980円/月 / Bundle 1,800円/月**
+- 本番価格: **Inventory 980円/月 / Markdown Decision 5年版 980円/月 / Markdown Decision 10年版 1,580円/月 / Bundle 1,800円/月**
 - Live課金は明示ゲート `LIVE_BILLING_ENABLED=true` のときだけ有効
 - TEST/LIVEのStripe key・Price・Portal・Webhookを分離
 - 各Live PriceはCheckout直前に **Live / active / JPY / monthly / plan capability metadata** を再照合し、不一致なら決済をfail closed
@@ -40,10 +40,10 @@ Stripe Customer Portalのメールログインは契約管理用です。別端�
 - 各追加ファイルは `date/日付` 列と数値変数1列だけを持つ形式に固定します。
 - 追加変数を使用する場合、価格・販売履歴側にも `date/日付` 列が必要です。
 - 複数ファイルは日付の共通部分だけを内部結合し、ずれた期間を勝手に補間しません。
-- 分析期間は **最大730期**。超過時は直近730期だけを使用します。
+- 分析期間は契約で制御します。Markdown Decision 5年版は **最大5年・2,000観測点**、10年版は **最大10年・4,000観測点**。日次・週次・月次を同じ日付スパンで判定し、超過時は新しい期間側を残します。
 - 重複日付、定数変数、数値でない値は拒否します。
 - 自社価格または追加変数同士の絶対相関が `|r| >= 0.85` の場合は警告、`|r| >= 0.95` の場合は多重共線性リスクとして価格推奨をHOLDします。
-- ファイルは既存インポータと同じく1ファイル最大5 MBです。最大4ファイルなので追加変数ファイルの理論上限は合計20 MBですが、分析用データはブラウザ内で処理し、サーバーへアップロードしません。
+- ファイルは既存インポータと同じく1ファイル最大5 MBです。最大4ファイルなので追加変数ファイルの理論上限は合計20 MBですが、分析に採用する観測点は契約上限（2,000 / 4,000）で制限します。分析用データはブラウザ内で処理し、サーバーへアップロードしません。
 - 競合価格・物価・広告・販促などは任意変数です。代替財を自動推測したり、外部データを自動取得したりしません。
 
 ## Live料金プラン（2026-11-16）
@@ -51,8 +51,9 @@ Stripe Customer Portalのメールログインは契約管理用です。別端�
 | プラン | 月額 | 機能 |
 |---|---:|---|
 | Inventory | 980円 | 複数SKUのMonte Carlo在庫・需要リスク分析 |
-| Markdown Decision | 980円 | 過去の価格・販売履歴を使った値下げシナリオ比較 |
-| Bundle | 1,800円 | Inventory + Markdown Decision。個別2契約合計1,960円より160円/月割引 |
+| Markdown Decision 5年版 | 980円 | 最大5年・2,000観測点まで。過去の価格・販売履歴を使った値下げシナリオ比較 |
+| Markdown Decision 10年版 | 1,580円 | 最大10年・4,000観測点まで。同じ分析を長期履歴に拡張 |
+| Bundle | 1,800円 | Inventory + Markdown Decision 5年版 |
 
 Stripe SubscriptionのPrice IDをサーバー側で再照合し、契約Priceから利用可能capabilityを決定します。Googleログインやメール文字列だけでは機能を開放しません。
 

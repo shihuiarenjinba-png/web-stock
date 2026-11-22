@@ -1,7 +1,7 @@
 import {numberOrNull} from './importer.js';
 
 export const MAX_MARKDOWN_COVARIATES = 4;
-export const MAX_MARKDOWN_PERIODS = 730;
+export const MAX_MARKDOWN_PERIODS = 4000;
 export const MULTICOLLINEARITY_WARN = 0.85;
 export const MULTICOLLINEARITY_HOLD = 0.95;
 
@@ -12,7 +12,6 @@ export function normalizeDateKey(value) {
     return value.toISOString().slice(0,10);
   }
   if (typeof value === 'number' && Number.isFinite(value) && value > 20000 && value < 80000) {
-    // Excel serial date (1900 date system). Calendar identity is all we need for joining.
     const ms = Math.round((value - 25569) * 86400000);
     const d = new Date(ms);
     if (Number.isFinite(d.getTime())) return d.toISOString().slice(0,10);
@@ -43,15 +42,12 @@ export function parseCovariateTable(rows, fallbackName='variable') {
   const candidates=[];
   for(let c=0;c<header.length;c++){
     if(c===dateIndex)continue;
-    const values=[];
     let valid=true,seen=0;
     for(let r=1;r<rows.length;r++){
       const raw=rows[r]?.[c];
       if(raw===''||raw===null||raw===undefined)continue;
       seen++;
-      const n=numberOrNull(raw);
-      if(n===null){valid=false;break;}
-      values.push(n);
+      if(numberOrNull(raw)===null){valid=false;break;}
     }
     if(valid&&seen>0)candidates.push({index:c,name:header[c]||fallbackName});
   }
@@ -94,10 +90,19 @@ function correlation(a,b){
   return num/Math.sqrt(da*db);
 }
 
-export function alignMarkdownCovariates(history,covariates,{maxPeriods=MAX_MARKDOWN_PERIODS}={}){
+function cutoffDateForYears(lastDate,maxYears){
+  const d=new Date(lastDate+'T00:00:00Z');
+  if(!Number.isFinite(d.getTime()))throw new Error('履歴の日付を解釈できません。');
+  d.setUTCFullYear(d.getUTCFullYear()-maxYears);
+  return d.toISOString().slice(0,10);
+}
+
+export function alignMarkdownCovariates(history,covariates,{maxPeriods=MAX_MARKDOWN_PERIODS,maxYears=null}={}){
   if(!Array.isArray(history))throw new Error('履歴データが不正です。');
   if(!Array.isArray(covariates))throw new Error('追加変数が不正です。');
   if(covariates.length>MAX_MARKDOWN_COVARIATES)throw new Error(`追加説明変数は最大${MAX_MARKDOWN_COVARIATES}個です。`);
+  if(!Number.isInteger(maxPeriods)||maxPeriods<28||maxPeriods>MAX_MARKDOWN_PERIODS)throw new Error('分析観測点上限が不正です。');
+  if(maxYears!==null&&(!Number.isInteger(maxYears)||maxYears<1||maxYears>10))throw new Error('分析年数上限が不正です。');
 
   const warnings=[];
   let rows=[...history];
@@ -112,13 +117,23 @@ export function alignMarkdownCovariates(history,covariates,{maxPeriods=MAX_MARKD
     if(rows.length<before)warnings.push(`追加変数との共通日付に揃え、${before-rows.length}期を除外しました。`);
     if(rows.length<2)throw new Error('複数ファイルに共通する日付が不足しています。');
   }else{
-    rows=rows.map(r=>({...r,covariates:[]}));
+    rows=rows.map(r=>({...r,covariates:[]})).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  }
+
+  if(maxYears!==null){
+    if(rows.some(r=>!r.date))throw new Error(`${maxYears}年の契約上限を確認するため、価格・販売履歴に date/日付 列が必要です。`);
+    const last=rows.at(-1)?.date;
+    const cutoff=cutoffDateForYears(last,maxYears);
+    const before=rows.length;
+    rows=rows.filter(r=>r.date>=cutoff);
+    if(rows.length<before)warnings.push(`契約上限に合わせ、最新日から直近${maxYears}年のデータだけを使用しました。`);
   }
 
   if(rows.length>maxPeriods){
     rows=rows.slice(-maxPeriods);
-    warnings.push(`分析期間上限のため直近${maxPeriods}期のみ使用しました。`);
+    warnings.push(`処理上限により直近${maxPeriods}観測点のみ使用しました。`);
   }
+  if(rows.length<2)throw new Error('分析可能な共通期間が不足しています。');
 
   const diagnostics=[];
   if(covariates.length&&rows.length>=3){
@@ -140,5 +155,5 @@ export function alignMarkdownCovariates(history,covariates,{maxPeriods=MAX_MARKD
   }
 
   const hardMulticollinearity=diagnostics.some(d=>Math.abs(d.r)>=MULTICOLLINEARITY_HOLD);
-  return {rows,warnings,diagnostics,hardMulticollinearity,covariateNames:covariates.map(c=>c.name)};
+  return {rows,warnings,diagnostics,hardMulticollinearity,covariateNames:covariates.map(c=>c.name),maxYears,maxPeriods};
 }

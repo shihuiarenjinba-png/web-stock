@@ -8,13 +8,14 @@ let authorized=false,skus=[],analyses=new Map(),selected=null,editing=null,strip
 const KEY='demandscope_pro_skus_v1';
 function liveBilling(){return stripeHealth?.mode==='live'}
 function selectedPlan(){return $('planChoice')?.value||'bundle'}
-function selectedPlanPrice(plan=selectedPlan()){return plan==='bundle'?1800:980}
-function planLabel(plan=selectedPlan()){return plan==='inventory'?'Inventory':plan==='markdown'?'Markdown Decision':plan==='combined'?'Inventory + Markdown':'Bundle'}
+function selectedPlanPrice(plan=selectedPlan()){return plan==='bundle'?1800:plan==='markdown10'?1580:980}
+function planLabel(plan=selectedPlan()){return plan==='inventory'?'Inventory':plan==='markdown'?'Markdown Decision 5年':plan==='markdown10'?'Markdown Decision 10年':plan==='combined'?'Inventory + Markdown 5年':plan==='combined10'?'Inventory + Markdown 10年':'Bundle'}
 function applyCapabilityVisibility(){
  const inventory=currentCapabilities.includes('inventory'),markdown=currentCapabilities.includes('markdown');
  document.querySelectorAll('.inventory-only').forEach(el=>el.classList.toggle('hidden',!inventory));
  const mw=$('markdownWorkspace');if(mw)mw.classList.toggle('hidden',!markdown);
  globalThis.demandScopeCapabilities=[...currentCapabilities];
+ globalThis.demandScopePlan=currentPlan;
 }
 function publicPreliveLocked(){return location.origin==='https://web-stock-78r.pages.dev'&&!liveBilling()}
 function syncCheckoutDisabled(){
@@ -131,7 +132,7 @@ function access(ok,unconfigured,entitlementState={}){
  $('portal').classList.toggle('hidden',!ok);
  $('logout').classList.toggle('hidden',!ok);
  $('accessTitle').textContent=ok?(liveBilling()?(lang()==='en'?'✓ Subscription verified':'✓ 契約を確認しました'):(lang()==='en'?'✓ Test subscription verified':'✓ テスト契約を確認しました')):(liveBilling()?(lang()==='en'?'🔒 Start with Stripe':'🔒 Stripe決済で利用開始'):t('🔒 Stripe テスト決済で利用開始'));
- $('accessText').textContent=ok?(currentCapabilities.includes('inventory')&&currentCapabilities.includes('markdown')?'在庫Monte Carloと値下げ判断の両方を利用できます。':currentCapabilities.includes('markdown')?'値下げ判断を利用できます。':'在庫Monte Carlo分析を利用できます。'):(liveBilling()?'料金プランを選択してStripe Checkoutへ進んでください。':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。');
+ $('accessText').textContent=ok?(currentCapabilities.includes('inventory')&&currentCapabilities.includes('markdown10')?'在庫Monte Carloと10年版Markdown Decisionを利用できます。':currentCapabilities.includes('inventory')&&currentCapabilities.includes('markdown')?'在庫Monte Carloと5年版Markdown Decisionを利用できます。':currentCapabilities.includes('markdown10')?'10年版Markdown Decisionを利用できます。':currentCapabilities.includes('markdown')?'5年版Markdown Decisionを利用できます。':'在庫Monte Carlo分析を利用できます。'):(liveBilling()?'料金プランを選択してStripe Checkoutへ進んでください。':'テストモードのStripe Checkoutで契約状態を確認後、機能が開放されます。');
  $('checkout').disabled=unconfigured;
  if(unconfigured)$('accessText').textContent=liveBilling()?'Cloudflare PagesのStripe本番設定を確認してください。':'Cloudflare Pagesにテスト用Stripe秘密鍵とセッション秘密値を設定してください。';
  applyBillingMode();applyCapabilityVisibility();

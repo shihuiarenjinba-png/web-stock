@@ -6,9 +6,11 @@ export function json(body,status=200,headers={}) {const h=new Headers({'Content-
 export const TEST_MONTHLY_JPY=100;
 export const LIVE_INVENTORY_MONTHLY_JPY=980;
 export const LIVE_MARKDOWN_MONTHLY_JPY=980;
+export const LIVE_MARKDOWN10_MONTHLY_JPY=1580;
 export const LIVE_BUNDLE_MONTHLY_JPY=1800;
 export const LIVE_INVENTORY_PRICE_ID='price_1Ua2NWBGa8rL8jwIKk7Tbtas';
 export const LIVE_MARKDOWN_PRICE_ID='price_1UcK5FBGa8rL8jwIHXsLDQJE';
+export const LIVE_MARKDOWN10_PRICE_ID='price_1UeVFEBGa8rL8jwIMkOc1Q7U';
 export const LIVE_BUNDLE_PRICE_ID='price_1UcK5GBGa8rL8jwIwinMXtj8';
 export const LIVE_MONTHLY_JPY=LIVE_INVENTORY_MONTHLY_JPY;
 export const LIVE_PRO_PRICE_ID=LIVE_BUNDLE_PRICE_ID;
@@ -44,6 +46,7 @@ export function activeStripeKey(env){
 export const DEMANDSCOPE_PLANS={
  inventory:{key:'inventory',priceId:LIVE_INVENTORY_PRICE_ID,amount:LIVE_INVENTORY_MONTHLY_JPY,capabilities:['inventory']},
  markdown:{key:'markdown',priceId:LIVE_MARKDOWN_PRICE_ID,amount:LIVE_MARKDOWN_MONTHLY_JPY,capabilities:['markdown']},
+ markdown10:{key:'markdown10',priceId:LIVE_MARKDOWN10_PRICE_ID,amount:LIVE_MARKDOWN10_MONTHLY_JPY,capabilities:['markdown','markdown10']},
  bundle:{key:'bundle',priceId:LIVE_BUNDLE_PRICE_ID,amount:LIVE_BUNDLE_MONTHLY_JPY,capabilities:['inventory','markdown']}
 };
 export function planDefinition(plan='bundle'){
@@ -53,23 +56,24 @@ export function activePriceId(env,plan='bundle'){
  if(billingMode(env)==='live'){
   if(plan==='inventory')return normalizedValue(env?.STRIPE_LIVE_INVENTORY_PRICE_ID||env?.STRIPE_LIVE_PRO_PRICE_ID)||LIVE_INVENTORY_PRICE_ID;
   if(plan==='markdown')return normalizedValue(env?.STRIPE_LIVE_MARKDOWN_PRICE_ID)||LIVE_MARKDOWN_PRICE_ID;
+  if(plan==='markdown10')return normalizedValue(env?.STRIPE_LIVE_MARKDOWN10_PRICE_ID)||LIVE_MARKDOWN10_PRICE_ID;
   return normalizedValue(env?.STRIPE_LIVE_BUNDLE_PRICE_ID)||LIVE_BUNDLE_PRICE_ID;
  }
  return normalizedValue(env?.STRIPE_PRO_PRICE_ID);
 }
 export function activeLivePriceIds(env){
- return ['inventory','markdown','bundle'].map(plan=>activePriceId(env,plan)).filter(Boolean);
+ return ['inventory','markdown','markdown10','bundle'].map(plan=>activePriceId(env,plan)).filter(Boolean);
 }
 export function capabilitiesForPriceId(env,priceId){
  if(billingMode(env)!=='live')return ['inventory','markdown'];
- for(const plan of ['inventory','markdown','bundle']){
+ for(const plan of ['inventory','markdown','markdown10','bundle']){
   if(activePriceId(env,plan)===priceId)return planDefinition(plan).capabilities;
  }
  return [];
 }
 export function planForPriceId(env,priceId){
  if(billingMode(env)!=='live')return 'bundle';
- for(const plan of ['inventory','markdown','bundle'])if(activePriceId(env,plan)===priceId)return plan;
+ for(const plan of ['inventory','markdown','markdown10','bundle'])if(activePriceId(env,plan)===priceId)return plan;
  return null;
 }
 export function configurationDiagnostics(env){
@@ -83,7 +87,7 @@ export function configurationDiagnostics(env){
  if(sessionSecret.length===0)issues.push({name:'SESSION_SECRET',reason:'missing'});
  else if(sessionSecret.length<32)issues.push({name:'SESSION_SECRET',reason:'too_short'});
  const priceIds=mode==='live'?activeLivePriceIds(env):[activePriceId(env)].filter(Boolean);
- if(mode==='live'&&priceIds.length!==3)issues.push({name:'STRIPE_LIVE_PLAN_PRICE_IDS',reason:'missing'});
+ if(mode==='live'&&priceIds.length!==4)issues.push({name:'STRIPE_LIVE_PLAN_PRICE_IDS',reason:'missing'});
  for(const priceId of priceIds)if(!/^price_[A-Za-z0-9]+$/.test(priceId))issues.push({name:mode==='live'?'STRIPE_LIVE_PLAN_PRICE_IDS':'STRIPE_PRO_PRICE_ID',reason:'invalid_format'});
  const appOrigin=normalizedValue(env?.APP_ORIGIN)||(mode==='live'?LIVE_APP_ORIGIN:'');
  if(mode==='live'&&!appOrigin)issues.push({name:'APP_ORIGIN',reason:'missing'});
@@ -115,7 +119,7 @@ export async function verifyLivePrice(env,plan='bundle'){
 }
 export async function verifyAllLivePrices(env){
  const results={};
- for(const plan of ['inventory','markdown','bundle'])results[plan]=await verifyLivePrice(env,plan);
+ for(const plan of ['inventory','markdown','markdown10','bundle'])results[plan]=await verifyLivePrice(env,plan);
  return {ok:Object.values(results).every(x=>x.ok),results};
 }
 export function isPublicProductionRequest(request){

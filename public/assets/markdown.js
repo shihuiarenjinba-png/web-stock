@@ -182,10 +182,13 @@ export function estimatePriceResponse(rows,{covariateNames=[]}={}){
   const r2=sst>0?1-sse/sst:null,residualSd=sd(residuals);
   if(beta[1]>=0)warnings.push('履歴では低価格ほど販売数が増える関係を確認できません。値下げ推奨はHOLDです。');
   if(r2!==null&&r2<0.05)warnings.push('価格・時間トレンド・追加変数でも販売変動をほとんど説明できません。');
+  else if(r2!==null&&r2<0.25)warnings.push('R²が0.25未満で説明力が弱いため、自動価格推奨を停止します。結果は参考診断として扱ってください。');
   const covariateCoefficients={};
   for(let j=0;j<covCount;j++)covariateCoefficients[covariateNames[j]||`variable_${j+1}`]=beta[3+j];
   const enough=usable.length>=28&&prices.length>=2&&Math.min(...counts.values())>=5&&beta[1]<0;
-  return {status:enough?'READY':'HOLD',usable,prices,counts,warnings,slope:beta[1],timeSlope:beta[2],intercept:beta[0],basePrice,r2,residualSd,covariateCoefficients,covariateStats:covStats};
+  const lowFit=r2!==null&&r2<0.25;
+  const status=enough?(lowFit?'CAUTION':'READY'):'HOLD';
+  return {status,usable,prices,counts,warnings,slope:beta[1],timeSlope:beta[2],intercept:beta[0],basePrice,r2,residualSd,covariateCoefficients,covariateStats:covStats};
 }
 
 export function analyzeMarkdownHistory({history,covariates=[],maxYears=null,maxPeriods=4000,financialDiagnostics=false,currentPrice,unitCost,currentInventory,horizonPeriods=30,discounts=[0,.05,.1,.15,.2],leftoverPenalty=0,runs=3000}){

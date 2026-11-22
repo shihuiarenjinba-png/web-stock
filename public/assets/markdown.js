@@ -203,6 +203,7 @@ export function estimatePriceResponse(rows,{covariateNames=[]}={}){
   const r2=sst>0?1-sse/sst:null,residualSd=sd(residuals);
   if(beta[1]>=0)warnings.push('履歴では低価格ほど販売数が増える関係を確認できません。値下げ推奨はHOLDです。');
   if(r2!==null&&r2<0.05)warnings.push('価格・時間トレンド・追加変数でも販売変動をほとんど説明できません。');
+  else if(r2!==null&&r2<0.50)warnings.push('R²が0.50未満です。販売変動の半分以上がモデル外に残るため、価格推定は中程度以下の説明力として扱ってください。');
   const covariateCoefficients={};
   for(let j=0;j<covCount;j++)covariateCoefficients[covariateNames[j]||`variable_${j+1}`]=beta[3+j];
   const enough=usable.length>=28&&prices.length>=2&&Math.min(...counts.values())>=5&&beta[1]<0&&r2!==null&&r2>=0.05&&extremeUnitOutliers.length===0;

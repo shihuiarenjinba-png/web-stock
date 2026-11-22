@@ -1,6 +1,17 @@
 import {entitlement as stripeEntitlement,verifiedSubscription,stripe} from './stripe.js';
 import {authenticatedMember} from './google-auth.js';
 
+function aggregatePlan(capabilities,plans=[]){
+ const inventory=capabilities.includes('inventory');
+ const markdown=capabilities.includes('markdown');
+ const markdown10=capabilities.includes('markdown10');
+ if(inventory&&markdown10)return 'combined10';
+ if(inventory&&markdown)return plans.includes('bundle')?'bundle':'combined';
+ if(markdown10)return 'markdown10';
+ if(markdown)return 'markdown';
+ return inventory?'inventory':null;
+}
+
 async function memberEntitlement(request,env){
  const member=await authenticatedMember(request,env);
  if(!member)return null;
@@ -26,14 +37,14 @@ async function memberEntitlement(request,env){
  }
  if(!matches.length)return null;
  const capabilities=[...new Set(matches.flatMap(x=>Array.isArray(x.capabilities)?x.capabilities:[]))];
- const plan=capabilities.includes('inventory')&&capabilities.includes('markdown')?(matches.some(x=>x.plan==='bundle')?'bundle':'combined'):(capabilities.includes('markdown')?'markdown':'inventory');
+ const plan=aggregatePlan(capabilities,matches.map(x=>x.plan));
  return {customer:matches[0].customer,subscription:matches[0].subscription,subscriptions:matches.map(x=>x.subscription),status:matches[0].status,source:'google',member_id:member.id,plan,capabilities};
 }
 export async function resolveEntitlement(request,env){
  const [browser,member]=await Promise.all([stripeEntitlement(request,env),memberEntitlement(request,env)]);
  if(browser&&member){
   const capabilities=[...new Set([...(browser.capabilities||[]),...(member.capabilities||[])])];
-  const plan=capabilities.includes('inventory')&&capabilities.includes('markdown')?(browser.plan==='bundle'||member.plan==='bundle'?'bundle':'combined'):(capabilities.includes('markdown')?'markdown':'inventory');
+  const plan=aggregatePlan(capabilities,[browser.plan,member.plan]);
   return {...member,...browser,source:'browser+google',plan,capabilities,subscriptions:[...new Set([...(member.subscriptions||[]),browser.subscription].filter(Boolean))]};
  }
  if(browser)return {...browser,source:'browser'};

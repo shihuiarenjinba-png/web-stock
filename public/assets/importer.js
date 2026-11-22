@@ -11,6 +11,15 @@ export function numberOrNull(v) {
   const normalized = /^[-+]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(s) ? s.replace(/,/g,'') : s;
   return NUM_RE.test(normalized) ? Number(normalized) : null;
 }
+export function transposeTable(raw){
+  if(!Array.isArray(raw))throw new Error('table_invalid');
+  const rows=raw.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
+  const width=Math.max(0,...rows.map(r=>r.length));
+  if(!rows.length||!width)throw new Error('empty_sheet');
+  if(width>MAX_COLS||rows.length>MAX_ROWS||width*rows.length>MAX_CELLS)throw new Error('too_many_cells');
+  return Array.from({length:width},(_,col)=>rows.map(row=>row?.[col]??''));
+}
+
 export function parseDelimited(text, delimiter) {
   if (text.length > 13 * 1024 * 1024) throw new Error('file_too_large');
   const src = text.replace(/^\uFEFF/,'');

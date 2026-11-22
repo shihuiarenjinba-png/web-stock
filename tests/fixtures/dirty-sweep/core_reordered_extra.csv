@@ -1,0 +1,6 @@
+﻿memo, units , 日付 , price ,inventory
+"campaign-A",10,2026/01/01,"1,000",30
+
+"campaign-B",12,2026/01/02,900,25
+"campaign-C",14,2026/01/03,850,20
+"campaign-D",13,2026/01/04,850,18

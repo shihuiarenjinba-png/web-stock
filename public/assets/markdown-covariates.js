@@ -36,6 +36,12 @@ function orientCovariateRows(raw){
   const rows=raw.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
   if(!rows.length)return {rows,orientation:'row'};
   const first=rows[0]||[];
+  const firstLabel=String(first[0]??'').trim();
+  const tail=first.slice(1).filter(v=>v!==''&&v!==null&&v!==undefined);
+  const dateLikeTail=tail.filter(v=>normalizeDateKey(v)).length;
+  if(DATE_HEADER.test(firstLabel)&&tail.length>=2&&dateLikeTail/tail.length>=0.75){
+    return {rows:transposeTable(rows),orientation:'transposed'};
+  }
   if(first.some(v=>DATE_HEADER.test(String(v??'').trim())))return {rows,orientation:'row'};
   const firstCol=rows.map(r=>r?.[0]);
   if(firstCol.some(v=>DATE_HEADER.test(String(v??'').trim())))return {rows:transposeTable(rows),orientation:'transposed'};

@@ -1,4 +1,4 @@
-import {numberOrNull} from './importer.js';
+import {numberOrNull,transposeTable} from './importer.js';
 
 export const MAX_MARKDOWN_COVARIATES = 4;
 export const MAX_MARKDOWN_PERIODS = 4000;
@@ -32,8 +32,26 @@ export function normalizeDateKey(value) {
   return new Date(parsed).toISOString().slice(0,10);
 }
 
+function orientCovariateRows(raw){
+  const rows=raw.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
+  if(!rows.length)return {rows,orientation:'row'};
+  const first=rows[0]||[];
+  const firstLabel=String(first[0]??'').trim();
+  const tail=first.slice(1).filter(v=>v!==''&&v!==null&&v!==undefined);
+  const dateLikeTail=tail.filter(v=>normalizeDateKey(v)).length;
+  if(DATE_HEADER.test(firstLabel)&&tail.length>=2&&dateLikeTail/tail.length>=0.75){
+    return {rows:transposeTable(rows),orientation:'transposed'};
+  }
+  if(first.some(v=>DATE_HEADER.test(String(v??'').trim())))return {rows,orientation:'row'};
+  const firstCol=rows.map(r=>r?.[0]);
+  if(firstCol.some(v=>DATE_HEADER.test(String(v??'').trim())))return {rows:transposeTable(rows),orientation:'transposed'};
+  return {rows,orientation:'row'};
+}
+
 export function parseCovariateTable(rows, fallbackName='variable') {
   if (!Array.isArray(rows) || rows.length < 2) throw new Error('追加変数ファイルにヘッダーとデータが必要です。');
+  const oriented=orientCovariateRows(rows);
+  rows=oriented.rows;
   const header = rows[0].map(v=>String(v ?? '').trim());
   const dateIndexes = header.map((v,i)=>DATE_HEADER.test(v)?i:-1).filter(i=>i>=0);
   if (dateIndexes.length !== 1) throw new Error('追加変数ファイルには date/日付 列を1つだけ含めてください。');
@@ -75,7 +93,7 @@ export function parseCovariateWorkbook(workbook, fallbackName='variable') {
   if(!workbook?.sheets?.length)throw new Error('追加変数ファイルを読み込めません。');
   const errors=[];
   for(const sheet of workbook.sheets){
-    try{return {...parseCovariateTable(sheet.rows,fallbackName),sheet:sheet.name};}
+    try{const oriented=orientCovariateRows(sheet.rows);return {...parseCovariateTable(sheet.rows,fallbackName),sheet:sheet.name,orientation:oriented.orientation};}
     catch(e){errors.push(`${sheet.name}: ${e.message}`);}
   }
   throw new Error(errors[0]||'追加変数ファイルに利用できるシートがありません。');

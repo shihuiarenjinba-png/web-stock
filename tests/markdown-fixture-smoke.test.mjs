@@ -63,6 +63,9 @@ test('strong noise does not crash and reports materially weaker fit than clean f
   assert.ok(Number.isFinite(n.r2));
   assert.ok(n.r2<c.r2);
   assert.ok(n.residualSd>c.residualSd);
+  assert.equal(n.status,'CAUTION');
+  assert.equal(noisyResult.recommendation,null);
+  assert.ok(n.warnings.some(w=>w.includes('R²が0.25未満')));
 });
 
 test('single shock is detected as an outlier candidate',()=>{

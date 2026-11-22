@@ -141,7 +141,7 @@ def build_outputs(frame, config):
             raise RuntimeError(f"{spec['id']}: monthly sequence contains a gap.")
 
         output = pd.DataFrame({
-            "date": values.index.to_period("M").to_timestamp("MS").strftime("%Y-%m-%d"),
+            "date": values.index.to_period("M").to_timestamp(how="start").strftime("%Y-%m-%d"),
             spec["id"]: values.to_numpy(dtype=float),
         })
         outputs[spec["filename"]] = output

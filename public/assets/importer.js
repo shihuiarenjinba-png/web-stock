@@ -118,40 +118,50 @@ const DATE = /^(date|day|time|timestamp|日付|年月日|日時|期間|日|週|�
 const ITEM = /^(sku|product|item|series|metric|indicator|商品|品目|指標|系列|製品|品番|商品名)$/i;
 function label(v,fallback){const s=String(v??'').trim();return (s&&s.length<=85?s:fallback);}
 function validDemand(v){const n=numberOrNull(v);return n!==null&&n>=0&&n<=1e9?n:null;}
+function candidateIssue(values){
+ const present=values.filter(v=>v!==''&&v!==null&&v!==undefined);
+ if(present.length===0)return null;
+ const nums=values.map(validDemand),count=nums.filter(n=>n!==null).length;
+ if(count<3||count/present.length<.75)return null;
+ if(nums.some((n,i)=>n===null&&values[i]!==''&&values[i]!==null&&values[i]!==undefined))return 'invalid_value';
+ const first=nums.findIndex(n=>n!==null),last=nums.findLastIndex(n=>n!==null);
+ if(first>=0&&nums.slice(first,last+1).some(n=>n===null))return 'internal_gap';
+ return null;
+}
 function candidate(values,name,axis,index){
  const present=values.filter(v=>v!==''&&v!==null&&v!==undefined);
  if(present.length===0)return null;
  const nums=values.map(validDemand);const count=nums.filter(n=>n!==null).length;
  if(count<3||count/present.length<.75)return null;
- // Reject gaps inside a series instead of silently compressing time.
- if(nums.some((n,i)=>n===null && values[i]!=='' && values[i]!==null && values[i]!==undefined)) return null;
+ if(candidateIssue(values))return null;
  const first=nums.findIndex(n=>n!==null),last=nums.findLastIndex(n=>n!==null);
- if(nums.slice(first,last+1).some(n=>n===null))return null;
  return {key:`${axis}:${index}`,name,values:nums.slice(first,last+1),axis,index,length:count,start:first,end:last};
 }
 export function inspectTable(raw){
  const rows=raw.filter(r=>Array.isArray(r)&&r.some(v=>v!==''&&v!==null&&v!==undefined));
  const cols=Math.min(MAX_COLS,Math.max(0,...rows.map(r=>r.length)));
  if(!rows.length||!cols)throw new Error('empty_sheet');
- const columns=[],rowSeries=[];
+ const columns=[],rowSeries=[],rejectedColumns=[],rejectedRows=[];
  const firstLabel=String(rows[0]?.[0]??'').trim();
  for(let j=0;j<cols;j++){
    if(j===0&&(DATE.test(firstLabel)||ITEM.test(firstLabel)))continue;
    const data=rows.slice(1).map(r=>r?.[j]??'');
-   const c=candidate(data,label(rows[0]?.[j],`Column ${j+1}`),'column',j);
-   if(c)columns.push(c);
+   const name=label(rows[0]?.[j],`Column ${j+1}`);
+   const c=candidate(data,name,'column',j);
+   if(c)columns.push(c);else{const reason=candidateIssue(data);if(reason)rejectedColumns.push({name,axis:'column',index:j,reason});}
  }
  // Nonheader-only numeric vertical single column without a header.
  if(!columns.length&&cols===1){const c=candidate(rows.map(r=>r[0]),'Demand','column',0);if(c)columns.push(c);}
  for(let i=1;i<rows.length;i++){
-   const c=candidate((rows[i]||[]).slice(1),label(rows[i]?.[0],`Row ${i+1}`),'row',i);
-   if(c)rowSeries.push(c);
+   const data=(rows[i]||[]).slice(1),name=label(rows[i]?.[0],`Row ${i+1}`);
+   const c=candidate(data,name,'row',i);
+   if(c)rowSeries.push(c);else{const reason=candidateIssue(data);if(reason)rejectedRows.push({name,axis:'row',index:i,reason});}
  }
  if(!rowSeries.length&&rows.length===1){const c=candidate(rows[0],'Demand','row',0);if(c)rowSeries.push(c);}
  // Prefer the orientation with longer per-item histories; tie favors fewer items.
  const metric=arr=>arr.length ? (arr.reduce((a,c)=>a+c.length,0)/arr.length) * Math.min(1,arr.length/2+0.5) : 0;
  const axis=metric(columns)>=metric(rowSeries)?'column':'row';
- return {rows,columns:cols,orientation:axis,series:{column:columns,row:rowSeries}, detected:{column:columns.length,row:rowSeries.length},preview:rows.slice(0,7).map(r=>Array.from({length:Math.min(cols,7)},(_,j)=>r[j]??''))};
+ return {rows,columns:cols,orientation:axis,series:{column:columns,row:rowSeries},rejected:{column:rejectedColumns,row:rejectedRows},detected:{column:columns.length,row:rowSeries.length},preview:rows.slice(0,7).map(r=>Array.from({length:Math.min(cols,7)},(_,j)=>r[j]??''))};
 }
 export function selectedSeries(inspection,orientation,keys,split=true){
  const available=inspection.series[orientation]||[];

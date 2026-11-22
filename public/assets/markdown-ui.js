@@ -12,7 +12,7 @@ let markdownCoreHistory=null;
 
 function render(result){
  const status=$('markdownStatus'),out=$('markdownResults'),table=$('markdownTableBody'),notes=$('markdownNotes');
- status.textContent=result.status==='READY'?'推定可能':'データ不足 / HOLD';
+ status.textContent=result.status==='READY'?'推定可能':result.status==='CAUTION'?'注意 / 自動推奨停止':'データ不足 / HOLD';
  status.className=result.status==='READY'?'ready-tag':'ready-tag pending-tag';
  const variableText=result.covariateNames?.length
    ? `追加変数: ${result.covariateNames.join(', ')}`

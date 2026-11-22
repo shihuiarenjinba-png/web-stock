@@ -109,9 +109,9 @@ export function estimatePriceResponse(rows,{covariateNames=[]}={}){
   return {status:enough?'READY':'HOLD',usable,prices,counts,warnings,slope:beta[1],timeSlope:beta[2],intercept:beta[0],basePrice,r2,residualSd,covariateCoefficients,covariateStats:covStats};
 }
 
-export function analyzeMarkdownHistory({history,covariates=[],currentPrice,unitCost,currentInventory,horizonPeriods=30,discounts=[0,.05,.1,.15,.2],leftoverPenalty=0,runs=3000}){
+export function analyzeMarkdownHistory({history,covariates=[],maxYears=null,maxPeriods=4000,currentPrice,unitCost,currentInventory,horizonPeriods=30,discounts=[0,.05,.1,.15,.2],leftoverPenalty=0,runs=3000}){
   const rawRows=typeof history==='string'?parseMarkdownHistory(history):history;
-  const aligned=alignMarkdownCovariates(rawRows,covariates);
+  const aligned=alignMarkdownCovariates(rawRows,covariates,{maxYears,maxPeriods});
   const fit=estimatePriceResponse(aligned.rows,{covariateNames:aligned.covariateNames});
   fit.warnings=[...aligned.warnings,...fit.warnings];
   fit.covariateNames=aligned.covariateNames;
@@ -131,7 +131,7 @@ export function analyzeMarkdownHistory({history,covariates=[],currentPrice,unitC
   const currentObserved=recent.filter(r=>Math.abs(r.price-currentPrice)/currentPrice<0.03);
   const baselinePool=currentObserved.length>=3?currentObserved:recent;
   const baselineUnits=baselinePool.length?mean(baselinePool.map(r=>r.units)):0;
-  if(!Number.isFinite(fit.slope))return {...fit,baselineUnits,scenarios:[],recommendation:null,periodsUsed:aligned.rows.length};
+  if(!Number.isFinite(fit.slope))return {...fit,baselineUnits,scenarios:[],recommendation:null,periodsUsed:aligned.rows.length,maxYears:aligned.maxYears,maxPeriods:aligned.maxPeriods};
 
   const scenarios=discounts.map(raw=>{
     const discount=finite('discount',raw,{min:0,max:.9});
@@ -156,5 +156,5 @@ export function analyzeMarkdownHistory({history,covariates=[],currentPrice,unitC
   if(fit.status==='READY'&&scenarios.length){
     recommendation=[...scenarios].sort((a,b)=>b.expectedGrossProfit-a.expectedGrossProfit||a.discount-b.discount)[0];
   }
-  return {...fit,baselineUnits,currentPrice,unitCost,currentInventory,horizonPeriods,leftoverPenalty,runs,scenarios,recommendation,periodsUsed:aligned.rows.length};
+  return {...fit,baselineUnits,currentPrice,unitCost,currentInventory,horizonPeriods,leftoverPenalty,runs,scenarios,recommendation,periodsUsed:aligned.rows.length,maxYears:aligned.maxYears,maxPeriods:aligned.maxPeriods};
 }
